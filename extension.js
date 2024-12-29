@@ -1,5 +1,6 @@
 const vscode = require("vscode");
 const fs = require("fs");
+const path = require("path");
 const { DOMParser } = require("@xmldom/xmldom");
 /**
  * @param {vscode.ExtensionContext} context
@@ -67,58 +68,138 @@ function activate(context) {
   console.log(
     'Congratulations, your extension "leetcode-test-case-extractor" is now active!'
   );
-  const disposable = vscode.commands.registerCommand(
-    "html-parser.extractTestCases",
-    async () => {
-      try {
-        vscode.window.showInformationMessage(
-          "Extract Test Cases command executed"
-        );
-        // Open file dialog to select HTML file
-        const fileUri = await vscode.window.showOpenDialog({
-          canSelectFiles: true,
-          canSelectMany: false,
-          filters: {
-            "HTML Files": ["html"],
-          },
-        });
 
-        if (fileUri && fileUri[0]) {
-          console.log("File selected");
+  const downloadsFolder = path.join(require("os").homedir(), "Downloads");
 
-          const filePath = fileUri[0].fsPath;
-          const htmlContent = fs.readFileSync(filePath, "utf-8");
+  // Watch the downloads folder for changes to HTML files
+  let debounceTimer;
 
-          // Extract test cases
-          const testCases = extractTestCases(htmlContent);
+  fs.watch(
+    downloadsFolder,
+    { persistent: true, recursive: false },
+    (eventType, filename) => {
+      if (eventType === "rename" && filename.endsWith(".html")) {
+        const filePath = path.join(downloadsFolder, filename);
 
-          // Display extracted test cases in the output channel
-          const outputChannel = vscode.window.createOutputChannel("Test Cases");
-          outputChannel.show();
-          testCases.forEach((testCase, index) => {
-            outputChannel.appendLine(`Test Case ${index + 1}:`);
-            outputChannel.appendLine(`  Input: ${testCase.input}`);
-            outputChannel.appendLine(`  Output: ${testCase.output}`);
-          });
-        } else {
-          vscode.window.showErrorMessage("No file selected.");
-        }
-      } catch (error) {
-        console.error(error);
-        vscode.window.showErrorMessage("Error extracting test cases.");
+        // Clear previous debounce timer if it's still active
+        clearTimeout(debounceTimer);
+
+        // Set new debounce timer
+        debounceTimer = setTimeout(async () => {
+          try {
+            const stats = await fs.promises.stat(filePath);
+
+            if (stats.isFile()) {
+              console.log(`New HTML file detected: ${filePath}`);
+
+              // Read the file asynchronously
+              const htmlContent = await fs.promises.readFile(filePath, "utf-8");
+
+              // Extract test cases
+              const testCases = extractTestCases(htmlContent);
+
+              // Show test cases in the output channel
+              const outputChannel =
+                vscode.window.createOutputChannel("Test Cases");
+              outputChannel.show();
+              testCases.forEach((testCase, index) => {
+                outputChannel.appendLine(`Test Case ${index + 1}:`);
+                outputChannel.appendLine(`  Input: ${testCase.input}`);
+                outputChannel.appendLine(`  Output: ${testCase.output}`);
+              });
+            }
+          } catch (err) {
+            console.error("Error accessing file:", err);
+          }
+        }, 1000); // Debounce interval
       }
     }
   );
-
-  context.subscriptions.push(disposable);
 }
 
-/**
- * Deactivate the extension.
- */
 function deactivate() {}
 
 module.exports = {
   activate,
   deactivate,
 };
+
+// fs.watch(
+//   downloadsFolder,
+//   { persistent: true, recursive: false },
+//   (eventType, filename) => {
+//     if (eventType === "rename" && filename.endsWith(".html")) {
+//       const filePath = path.join(downloadsFolder, filename);
+
+//       setTimeout(() => {
+//         fs.stat(filePath, (err, stats) => {
+//           if (err) {
+//             console.error("Error accessing file:", err);
+//             return;
+//           }
+
+//           if (stats.isFile()) {
+//             console.log(`New HTML file detected: ${filePath}`);
+//             const htmlContent = fs.readFileSync(filePath, "utf-8");
+
+//             const testCases = extractTestCases(htmlContent);
+
+//             const outputChannel =
+//               vscode.window.createOutputChannel("Test Cases");
+//             outputChannel.show();
+//             testCases.forEach((testCase, index) => {
+//               outputChannel.appendLine(`Test Case ${index + 1}:`);
+//               outputChannel.appendLine(`  Input: ${testCase.input}`);
+//               outputChannel.appendLine(`  Output: ${testCase.output}`);
+//             });
+//           }
+//         });
+//       }, 1000);
+//     }
+//   }
+// );
+
+// const disposable = vscode.commands.registerCommand(
+//   "html-parser.extractTestCases",
+//   async () => {
+//     try {
+//       vscode.window.showInformationMessage(
+//         "Extract Test Cases command executed"
+//       );
+//       // Open file dialog to select HTML file
+//       const fileUri = await vscode.window.showOpenDialog({
+//         canSelectFiles: true,
+//         canSelectMany: false,
+//         filters: {
+//           "HTML Files": ["html"],
+//         },
+//       });
+
+//       if (fileUri && fileUri[0]) {
+//         console.log("File selected");
+
+//         const filePath = fileUri[0].fsPath;
+//         const htmlContent = fs.readFileSync(filePath, "utf-8");
+
+//         // Extract test cases
+//         const testCases = extractTestCases(htmlContent);
+
+//         // Display extracted test cases in the output channel
+//         const outputChannel = vscode.window.createOutputChannel("Test Cases");
+//         outputChannel.show();
+//         testCases.forEach((testCase, index) => {
+//           outputChannel.appendLine(`Test Case ${index + 1}:`);
+//           outputChannel.appendLine(`  Input: ${testCase.input}`);
+//           outputChannel.appendLine(`  Output: ${testCase.output}`);
+//         });
+//       } else {
+//         vscode.window.showErrorMessage("No file selected.");
+//       }
+//     } catch (error) {
+//       console.error(error);
+//       vscode.window.showErrorMessage("Error extracting test cases.");
+//     }
+//   }
+// );
+
+// context.subscriptions.push(disposable);
