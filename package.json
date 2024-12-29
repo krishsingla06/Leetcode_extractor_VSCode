@@ -14,14 +14,7 @@
     "*"
   ],
   "main": "./extension.js",
-  "contributes": {
-    "commands": [
-      {
-        "command": "html-parser.extractTestCases",
-        "title": "ulala"
-      }
-    ]
-  },
+  "contributes": {},
   "scripts": {
     "lint": "eslint .",
     "pretest": "npm run lint",

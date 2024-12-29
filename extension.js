@@ -64,6 +64,38 @@ function extractTestCases(html) {
   return testCases;
 }
 
+function saveTestCasesToFile(testCases, filename) {
+  const downloadsFolder = path.join(require("os").homedir(), "Downloads");
+  //remove the .html extension
+  filename = filename.replace(".html", "");
+  const outputFile = path.join(
+    downloadsFolder,
+    "test_cases",
+    `${filename}.txt`
+  ); // Ensure file path is correct
+  const dir = path.dirname(outputFile);
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true }); // Create the folder if it doesn't exist
+  }
+  console.log("Output File........:", outputFile);
+
+  let content = "";
+  testCases.forEach((testCase, index) => {
+    content += `Test Case ${index + 1}:\n`;
+    content += `  Input: ${testCase.input}\n`;
+    content += `  Output: ${testCase.output}\n\n`;
+  });
+
+  try {
+    // Write to the file synchronously
+    fs.writeFileSync(outputFile, content, "utf-8");
+    vscode.window.showInformationMessage("Test cases saved to test_cases.txt.");
+  } catch (err) {
+    console.error("Error saving test cases to file:", err);
+    vscode.window.showErrorMessage("Error saving test cases to file.");
+  }
+}
+
 function activate(context) {
   console.log(
     'Congratulations, your extension "leetcode-test-case-extractor" is now active!'
@@ -107,6 +139,7 @@ function activate(context) {
                 outputChannel.appendLine(`  Input: ${testCase.input}`);
                 outputChannel.appendLine(`  Output: ${testCase.output}`);
               });
+              saveTestCasesToFile(testCases, filename);
             }
           } catch (err) {
             console.error("Error accessing file:", err);
@@ -123,6 +156,8 @@ module.exports = {
   activate,
   deactivate,
 };
+
+//---------------------------------OLD CODE---------------------------------
 
 // fs.watch(
 //   downloadsFolder,
