@@ -10,11 +10,19 @@
     "Other"
   ],
   "activationEvents": [
-    "onCommand:html-parser.extractTestCases",
-    "*"
+    "*",
+    "onCommand:html-parser.openTestCases"
   ],
   "main": "./extension.js",
-  "contributes": {},
+  "contributes": {
+    "commands": [
+      {
+        "command": "html-parser.openTestCases",
+        "title": "Open Test Cases",
+        "category": "HTML Parser"
+      }
+    ]
+  },
   "scripts": {
     "lint": "eslint .",
     "pretest": "npm run lint",
@@ -28,5 +36,13 @@
     "@vscode/test-electron": "^2.4.1",
     "@xmldom/xmldom": "^0.8.10",
     "eslint": "^9.16.0"
+  },
+  "views": {
+    "explorer": [
+      {
+        "id": "testCasesView",
+        "name": "Test Cases"
+      }
+    ]
   }
 }
