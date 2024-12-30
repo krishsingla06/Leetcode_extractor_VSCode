@@ -9,7 +9,7 @@ const { DOMParser } = require("@xmldom/xmldom");
 
 function activate(context) {
   console.log(
-    'Congratulations, your extension "leetcode-test-case-extractor" is now active!'
+    'Congratulations, your extension "leetcode-test-case-extractor" is now active! -> Testing !!!'
   );
 
   //------Side bar ka UI-UX
@@ -44,12 +44,7 @@ function activate(context) {
           const cppContent = activeEditor.document.getText();
 
           // Pass everything to the tester function
-          testerfun(
-            cppContent,
-            parsedInputkk,
-            parsedOutputkk,
-            inputVariableskk
-          );
+          testerfun(cppContent, parsedInput, parsedOutput, variableNames);
         } else {
           vscode.window.showErrorMessage("No active file detected.");
         }
@@ -280,8 +275,10 @@ function parseAndFormat(input) {
     }
     result += char;
   }
+  result += " ;";
 
-  console.log("returning : ", result);
+  console.log("returning formattedcode : ", result);
+  console.log("returning Variable Names: ", variableNames);
   return {
     variables: variableNames,
     formattedCode: result,
@@ -447,6 +444,8 @@ function updateCppFile(currentcode, parsedInput, parsedOutput, inputVariables) {
   const inputString = parsedInput; // Example of parsed input
   const outputString = parsedOutput; // Example of parsed output
   const funCall = `fun(${inputVariables.join(", ")});`;
+  const nxtline = `if (expected == fun(${inputVariables.join(", ")}))`;
+  //if (expectedoutput == fun(nums, val))
 
   // Insert the parsed input and output and the function call
   cppContent =
@@ -458,6 +457,7 @@ function updateCppFile(currentcode, parsedInput, parsedOutput, inputVariables) {
     "\n" +
     funCall +
     "\n" +
+    nxtline +
     cppContent.slice(insertIndex + "// add your code here".length);
 
   // Write the updated content back to the C++ file
