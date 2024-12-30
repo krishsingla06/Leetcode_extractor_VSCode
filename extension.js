@@ -123,6 +123,8 @@ function activate(context) {
         vscode.window.showInformationMessage(`Running Test Case ${index + 1}`);
         let variableNames = parseVariableNames(parsedInput);
         console.log(`Variable Names:`, variableNames);
+        //testerfun(parsedInput, parsedOutput, variableNames); //parsing ache se karni reh gyi bss :)
+        testerfun(parsedInputkk, parsedOutputkk, inputVariableskk);
         testCaseProvider.refresh();
       }
     )
@@ -369,6 +371,107 @@ int main() {
     vscode.window.vscode.window.showTextDocument(doc);
   });
 }
+
+//---------------------------------------------Compile and run------------------------------------------------
+
+const { exec } = require("child_process");
+
+// Function to write the parsed content to bgrunner.cpp
+function updateCppFile(parsedInput, parsedOutput, inputVariables) {
+  // Path to your C++ file
+  const cppFilePath = "./bgrunner.cpp";
+
+  // Read the current content of the C++ file
+  let cppContent = fs.readFileSync(cppFilePath, "utf8");
+
+  // Extract where the code will be inserted after the line `// add your code here`
+  const insertIndex = cppContent.indexOf("// add your code here");
+
+  if (insertIndex === -1) {
+    console.log("Couldn't find the comment line in bgrunner.cpp");
+    return;
+  }
+
+  // Prepare the code to insert
+  const inputString = parsedInput; // Example of parsed input
+  const outputString = parsedOutput; // Example of parsed output
+  const funCall = `fun(${inputVariables.join(", ")});`;
+
+  // Insert the parsed input and output and the function call
+  cppContent =
+    cppContent.slice(0, insertIndex + "// add your code here".length) +
+    "\n" +
+    inputString +
+    "\n" +
+    outputString +
+    "\n" +
+    funCall +
+    "\n" +
+    cppContent.slice(insertIndex + "// add your code here".length);
+
+  // Write the updated content back to the C++ file
+  fs.writeFileSync(cppFilePath, cppContent);
+
+  console.log(
+    "Updated bgrunner.cpp with parsed input, output, and function call"
+  );
+}
+
+// Function to compile and run the C++ file
+function compileAndRunCpp() {
+  // Compile the C++ file
+  exec("g++ bgrunner.cpp -o kkk.exe", (err, stdout, stderr) => {
+    if (err) {
+      console.error(`Error compiling: ${stderr}`);
+      return;
+    }
+
+    console.log("C++ code compiled successfully!");
+
+    // Run the compiled executable
+    exec("kkk.exe", (err, stdout, stderr) => {
+      if (err) {
+        console.error(`Error running C++ code: ${stderr}`);
+        return;
+      }
+
+      // Output from the C++ program
+      console.log(`C++ Output: ${stdout}`);
+    });
+  });
+}
+
+// Function to restore the original content from bgrunnerpermanent.cpp to bgrunner.cpp
+function restoreOriginalCpp() {
+  // Read the content of bgrunnerpermanent.cpp
+  // const path =
+  const permanentCpp = fs.readFileSync("./bgrunnerpermanent.cpp", "utf8");
+
+  // Write the original content back to bgrunner.cpp
+  fs.writeFileSync("./bgrunner.cpp", permanentCpp);
+
+  console.log("Restored bgrunner.cpp to its original state.");
+}
+
+// Example parsed input, output, and variable list
+const parsedInputkk = "auto nums = {3, 2, 2, 3} ; auto val = 2;"; // Example input
+const parsedOutputkk = "auto expectedoutput = 'a';"; // Example output
+const inputVariableskk = ["nums", "val"]; // List of variable names
+
+// Update the C++ file with parsed input, output, and function call
+
+async function testerfun(parsedInput, parsedOutput, inputVariables) {
+  console.log("Kuch nhi kiya");
+  await restoreOriginalCpp();
+  await updateCppFile(parsedInput, parsedOutput, inputVariables);
+  await compileAndRunCpp();
+  setTimeout(() => {
+    restoreOriginalCpp();
+  }, 500);
+}
+
+//testerfun(parsedInput, parsedOutput, inputVariables);
+
 //---------------------------------------------END------------------------------------------------
 
 //---------------------------------OLD CODE---------------------------------
