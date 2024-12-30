@@ -84,7 +84,7 @@ class TestCaseTreeProvider {
       treeItem.command = {
         title: button,
         command: "testCasesView.runTestCase",
-        arguments: [index], // Pass the index of the test case to run
+        arguments: [index, input, output], // Pass the index of the test case to run
       };
 
       return treeItem;
@@ -111,15 +111,21 @@ function activate(context) {
 
   // Register a command to run the test case
   context.subscriptions.push(
-    vscode.commands.registerCommand("testCasesView.runTestCase", (index) => {
-      console.log(`Running test case ${index + 1}`);
-      // Placeholder for the function that runs the test case
-      // After running the test case, update the tree view with the result
-      vscode.window.showInformationMessage(`Running Test Case ${index + 1}...`);
-
-      // Refresh the tree view after running the test case
-      testCaseProvider.refresh();
-    })
+    vscode.commands.registerCommand(
+      "testCasesView.runTestCase",
+      (index, input, output) => {
+        console.log(`Running test case ${index + 1}`);
+        input = input.replace("**Input:**", "");
+        output = output.replace("**Output:**", "");
+        let parsedInput = parseInput(input);
+        let parsedOutput = parseOutput(output);
+        console.log(`"Parsed Test Cases:",${parsedInput}, ${parsedOutput}`);
+        vscode.window.showInformationMessage(`Running Test Case ${index + 1}`);
+        let variableNames = parseVariableNames(parsedInput);
+        console.log(`Variable Names:`, variableNames);
+        testCaseProvider.refresh();
+      }
+    )
   );
 
   // Refresh the tree view when the active editor changes
@@ -202,6 +208,38 @@ module.exports = {
   activate,
   deactivate,
 };
+
+//----------------------Parser-------------------------
+function parseInput(inputString) {
+  // Remove any leading or trailing whitespace
+  let inputContent = inputString.trim();
+  // Add 'auto' keyword to variable assignments
+  inputContent = inputContent.replace(/(\w+)\s*=\s*/g, "auto $1 ="); // Modify variable assignments
+  inputContent += ";"; // Add semicolon to the input
+
+  return inputContent;
+}
+
+function parseOutput(outputString) {
+  // Remove any leading or trailing whitespace
+  let outputContent = "auto expected = " + outputString.trim() + ";";
+  return outputContent;
+}
+
+function parseVariableNames(input) {
+  // Regular expression to capture variable names between 'auto' and '='
+  const regex = /auto\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*=/g;
+  const variableNames = [];
+  let match;
+
+  // Loop through all matches and extract variable names
+  while ((match = regex.exec(input)) !== null) {
+    const varName = match[1]; // Extracted variable name
+    variableNames.push(varName); // Store the variable name
+  }
+
+  return variableNames;
+}
 
 // For extracting test cases from LeetCode-like HTML content---------------------------------------
 function extractTestCases(html) {
