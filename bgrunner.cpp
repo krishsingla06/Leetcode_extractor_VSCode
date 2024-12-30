@@ -1,11 +1,3 @@
-#include <bits/stdc++.h>
-using namespace std;
-
-char fun(auto nums, auto val)
-{
-    return 'a';
-}
-
 int main()
 {
     // add your code here
@@ -20,3 +12,5 @@ int main()
 
     return 0;
 }
+
+// yeh bass ek prototype hai, bgrunner aur bgrunnerpermanent toh user ki vscode wale folder mei kahin save hoyengi

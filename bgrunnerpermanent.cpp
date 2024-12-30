@@ -1,11 +1,3 @@
-#include <bits/stdc++.h>
-using namespace std;
-
-char fun(auto nums, auto val)
-{
-    return 'a';
-}
-
 int main()
 {
     // add your code here

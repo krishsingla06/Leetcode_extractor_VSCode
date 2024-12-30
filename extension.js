@@ -12,6 +12,133 @@ const { DOMParser } = require("@xmldom/xmldom");
 //  * @returns An array of test cases with inputs and outputs.
 //  */
 
+function activate(context) {
+  console.log(
+    'Congratulations, your extension "leetcode-test-case-extractor" is now active!'
+  );
+
+  //------Side bar ka UI-UX
+
+  const testCaseProvider = new TestCaseTreeProvider();
+  vscode.window.registerTreeDataProvider("testCasesView", testCaseProvider);
+
+  // Register a command to run the test case
+  context.subscriptions.push(
+    vscode.commands.registerCommand(
+      "testCasesView.runTestCase",
+      (index, input, output) => {
+        console.log(`Running test case ${index + 1}`);
+        input = input.replace("**Input:**", "");
+        output = output.replace("**Output:**", "");
+        let parsedInput = parseInput(input);
+        let parsedOutput = parseOutput(output);
+        console.log(`"Parsed Test Cases:",${parsedInput}, ${parsedOutput}`);
+        vscode.window.showInformationMessage(`Running Test Case ${index + 1}`);
+        let variableNames = parseVariableNames(parsedInput);
+        console.log(`Variable Names:`, variableNames);
+        const activeEditor = vscode.window.activeTextEditor;
+        if (activeEditor) {
+          const filePath = activeEditor.document.fileName;
+          console.log(`Current file path: ${filePath}`);
+
+          // Read the file content (if needed)
+          const cppContent = activeEditor.document.getText();
+
+          // Pass everything to the tester function
+          testerfun(
+            cppContent,
+            parsedInputkk,
+            parsedOutputkk,
+            inputVariableskk
+          );
+        } else {
+          vscode.window.showErrorMessage("No active file detected.");
+        }
+
+        testCaseProvider.refresh();
+      }
+    )
+  );
+
+  // Refresh the tree view when the active editor changes
+  vscode.window.onDidChangeActiveTextEditor((editor) => {
+    if (editor && editor.document.fileName.endsWith(".cpp")) {
+      testCaseProvider.currentCppFile = editor.document.fileName;
+      testCaseProvider.refresh();
+    }
+  });
+
+  // Add a command to refresh manually
+  context.subscriptions.push(
+    vscode.commands.registerCommand("testCasesView.refresh", () => {
+      testCaseProvider.refresh();
+    })
+  );
+
+  // Trigger initial refresh if there's an active cpp file
+  if (vscode.window.activeTextEditor?.document.fileName.endsWith(".cpp")) {
+    testCaseProvider.currentCppFile =
+      vscode.window.activeTextEditor.document.fileName;
+    testCaseProvider.refresh();
+  }
+
+  //------Code to watch whether new HTML file is downloaded or not, if yes, fetch its IO and generate boilerplate (Leetcode template fetching pending)------------------------------------------------
+  const downloadsFolder = path.join(require("os").homedir(), "Downloads");
+  // Watch the downloads folder for changes to HTML files
+  let debounceTimer;
+  fs.watch(
+    downloadsFolder,
+    { persistent: true, recursive: false },
+    (eventType, filename) => {
+      if (eventType === "rename" && filename.endsWith(".html")) {
+        const filePath = path.join(downloadsFolder, filename);
+        // Clear previous debounce timer if it's still active
+        clearTimeout(debounceTimer);
+        // Set new debounce timer
+        debounceTimer = setTimeout(async () => {
+          try {
+            const stats = await fs.promises.stat(filePath);
+
+            if (stats.isFile()) {
+              console.log(`New HTML file detected: ${filePath}`);
+
+              // Read the file asynchronously
+              const htmlContent = await fs.promises.readFile(filePath, "utf-8");
+
+              // Extract test cases
+              const testCases = extractTestCases(htmlContent);
+
+              // Show test cases in the output channel
+              const outputChannel =
+                vscode.window.createOutputChannel("Test Cases");
+              outputChannel.show();
+              testCases.forEach((testCase, index) => {
+                outputChannel.appendLine(`Test Case ${index + 1}:`);
+                outputChannel.appendLine(`  Input: ${testCase.input}`);
+                outputChannel.appendLine(`  Output: ${testCase.output}`);
+              });
+              saveTestCasesToFile(testCases, filename);
+              createProblemFiles(filename, null, testCases);
+            }
+          } catch (err) {
+            console.error("Error accessing file:", err);
+          }
+        }, 1000); // Debounce interval
+      }
+    }
+  );
+  //-------End
+}
+
+function deactivate() {}
+
+module.exports = {
+  activate,
+  deactivate,
+};
+
+//------------------Sidebar-------------------
+
 class TestCaseTreeProvider {
   constructor() {
     this._onDidChangeTreeData = new vscode.EventEmitter();
@@ -101,117 +228,7 @@ class TestCaseTreeProvider {
   }
 }
 
-function activate(context) {
-  console.log(
-    'Congratulations, your extension "leetcode-test-case-extractor" is now active!'
-  );
-
-  const testCaseProvider = new TestCaseTreeProvider();
-  vscode.window.registerTreeDataProvider("testCasesView", testCaseProvider);
-
-  // Register a command to run the test case
-  context.subscriptions.push(
-    vscode.commands.registerCommand(
-      "testCasesView.runTestCase",
-      (index, input, output) => {
-        console.log(`Running test case ${index + 1}`);
-        input = input.replace("**Input:**", "");
-        output = output.replace("**Output:**", "");
-        let parsedInput = parseInput(input);
-        let parsedOutput = parseOutput(output);
-        console.log(`"Parsed Test Cases:",${parsedInput}, ${parsedOutput}`);
-        vscode.window.showInformationMessage(`Running Test Case ${index + 1}`);
-        let variableNames = parseVariableNames(parsedInput);
-        console.log(`Variable Names:`, variableNames);
-        //testerfun(parsedInput, parsedOutput, variableNames); //parsing ache se karni reh gyi bss :)
-        testerfun(parsedInputkk, parsedOutputkk, inputVariableskk);
-        testCaseProvider.refresh();
-      }
-    )
-  );
-
-  // Refresh the tree view when the active editor changes
-  vscode.window.onDidChangeActiveTextEditor((editor) => {
-    if (editor && editor.document.fileName.endsWith(".cpp")) {
-      testCaseProvider.currentCppFile = editor.document.fileName;
-      testCaseProvider.refresh();
-    }
-  });
-
-  // Add a command to refresh manually
-  context.subscriptions.push(
-    vscode.commands.registerCommand("testCasesView.refresh", () => {
-      testCaseProvider.refresh();
-    })
-  );
-
-  // Trigger initial refresh if there's an active cpp file
-  if (vscode.window.activeTextEditor?.document.fileName.endsWith(".cpp")) {
-    testCaseProvider.currentCppFile =
-      vscode.window.activeTextEditor.document.fileName;
-    testCaseProvider.refresh();
-  }
-
-  //---------------------------------------------END------------------------------------------------
-
-  const downloadsFolder = path.join(require("os").homedir(), "Downloads");
-
-  // Watch the downloads folder for changes to HTML files
-  let debounceTimer;
-
-  fs.watch(
-    downloadsFolder,
-    { persistent: true, recursive: false },
-    (eventType, filename) => {
-      if (eventType === "rename" && filename.endsWith(".html")) {
-        const filePath = path.join(downloadsFolder, filename);
-
-        // Clear previous debounce timer if it's still active
-        clearTimeout(debounceTimer);
-
-        // Set new debounce timer
-        debounceTimer = setTimeout(async () => {
-          try {
-            const stats = await fs.promises.stat(filePath);
-
-            if (stats.isFile()) {
-              console.log(`New HTML file detected: ${filePath}`);
-
-              // Read the file asynchronously
-              const htmlContent = await fs.promises.readFile(filePath, "utf-8");
-
-              // Extract test cases
-              const testCases = extractTestCases(htmlContent);
-
-              // Show test cases in the output channel
-              const outputChannel =
-                vscode.window.createOutputChannel("Test Cases");
-              outputChannel.show();
-              testCases.forEach((testCase, index) => {
-                outputChannel.appendLine(`Test Case ${index + 1}:`);
-                outputChannel.appendLine(`  Input: ${testCase.input}`);
-                outputChannel.appendLine(`  Output: ${testCase.output}`);
-              });
-              saveTestCasesToFile(testCases, filename);
-              createProblemFiles(filename, null, testCases);
-            }
-          } catch (err) {
-            console.error("Error accessing file:", err);
-          }
-        }, 1000); // Debounce interval
-      }
-    }
-  );
-}
-
-function deactivate() {}
-
-module.exports = {
-  activate,
-  deactivate,
-};
-
-//----------------------Parser-------------------------
+//----------------------Parser----------------------------------
 function parseInput(inputString) {
   // Remove any leading or trailing whitespace
   let inputContent = inputString.trim();
@@ -243,7 +260,7 @@ function parseVariableNames(input) {
   return variableNames;
 }
 
-// For extracting test cases from LeetCode-like HTML content---------------------------------------
+//-----------For extracting test cases from LeetCode-like HTML content---------------------------------------
 function extractTestCases(html) {
   console.log("entered function....");
 
@@ -377,12 +394,13 @@ int main() {
 const { exec } = require("child_process");
 
 // Function to write the parsed content to bgrunner.cpp
-function updateCppFile(parsedInput, parsedOutput, inputVariables) {
+function updateCppFile(currentcode, parsedInput, parsedOutput, inputVariables) {
   // Path to your C++ file
   const cppFilePath = "./bgrunner.cpp";
 
   // Read the current content of the C++ file
-  let cppContent = fs.readFileSync(cppFilePath, "utf8");
+  let cppContentwithoutcurrentcode = fs.readFileSync(cppFilePath, "utf8");
+  let cppContent = `${currentcode}\n${cppContentwithoutcurrentcode}`;
 
   // Extract where the code will be inserted after the line `// add your code here`
   const insertIndex = cppContent.indexOf("// add your code here");
@@ -420,6 +438,7 @@ function updateCppFile(parsedInput, parsedOutput, inputVariables) {
 // Function to compile and run the C++ file
 function compileAndRunCpp() {
   // Compile the C++ file
+  console.log("Entered Compile and run function");
   exec("g++ bgrunner.cpp -o kkk.exe", (err, stdout, stderr) => {
     if (err) {
       console.error(`Error compiling: ${stderr}`);
@@ -437,6 +456,7 @@ function compileAndRunCpp() {
 
       // Output from the C++ program
       console.log(`C++ Output: ${stdout}`);
+      //popup in vscode showing result
     });
   });
 }
@@ -460,216 +480,28 @@ const inputVariableskk = ["nums", "val"]; // List of variable names
 
 // Update the C++ file with parsed input, output, and function call
 
-async function testerfun(parsedInput, parsedOutput, inputVariables) {
+async function testerfun(
+  currentcode,
+  parsedInput,
+  parsedOutput,
+  inputVariables
+) {
   console.log("Kuch nhi kiya");
   await restoreOriginalCpp();
-  await updateCppFile(parsedInput, parsedOutput, inputVariables);
+  await updateCppFile(currentcode, parsedInput, parsedOutput, inputVariables);
   await compileAndRunCpp();
-  setTimeout(() => {
-    restoreOriginalCpp();
-  }, 500);
+  // setTimeout(() => {
+  //   restoreOriginalCpp();
+  // }, 500);
 }
 
-//testerfun(parsedInput, parsedOutput, inputVariables);
-
-//---------------------------------------------END------------------------------------------------
-
-//---------------------------------OLD CODE---------------------------------
-
-// let testCasesView = null;
-
-// function getTestCaseFilePath(problemName) {
-//   const testCasesFolder = path.join(
-//     vscode.workspace.workspaceFolders[0].uri.fsPath,
-//     "test_cases"
-//   );
-//   return path.join(testCasesFolder, `${problemName}.json`);
-// }
-
-// function generateTestCasesHtml(problemName, testCases) {
-//   return `
-//   <!DOCTYPE html>
-//   <html lang="en">
-//   <head>
-//       <meta charset="UTF-8">
-//       <meta name="viewport" content="width=device-width, initial-scale=1.0">
-//       <title>${problemName} Test Cases</title>
-//       <style>
-//           body {
-//               font-family: Arial, sans-serif;
-//               margin: 0;
-//               padding: 0;
-//           }
-//           .container {
-//               padding: 10px;
-//               overflow-y: auto;
-//               max-height: 90vh;
-//           }
-//           h1 {
-//               font-size: 1.5rem;
-//               color: rgb(255, 255, 255);
-//           }
-//           .test-case {
-//               margin-bottom: 15px;
-//               padding: 10px;
-//               border: 1px solid #ccc;
-//               border-radius: 5px;
-//               background:rgb(8, 7, 7);
-//           }
-//           .test-case h2 {
-//               font-size: 1.2rem;
-//               margin: 0;
-//               color: rgb(255, 255, 255);
-//           }
-//           .test-case p {
-//               margin: 5px 0;
-//           }
-//           button {
-//               background: #007acc;
-//               color: white;
-//               border: none;
-//               padding: 5px 10px;
-//               border-radius: 3px;
-//               cursor: pointer;
-//           }
-//           button:hover {
-//               background: #005f99;
-//           }
-//       </style>
-//   </head>
-//   <body>
-//       <div class="container">
-//           <h1>Test Cases</h1>
-//           ${testCases
-//             .map(
-//               (testCase, index) => `
-//               <div class="test-case">
-//                   <h2>Test Case ${index + 1}</h2>
-//                   <p><strong>Input:</strong> <pre>${testCase.input}</pre></p>
-//                   <p><strong>Output:</strong> <pre>${testCase.output}</pre></p>
-//                   <button onclick="runTest(${index})">Run Test Case</button>
-//               </div>
-//           `
-//             )
-//             .join("")}
-//       </div>
-//       <script>
-//           const vscode = acquireVsCodeApi();
-
-//           function runTest(index) {
-//               console.log("Running test case:", index);
-//               vscode.postMessage({
-//                   command: "runTestCase",
-//                   testCaseIndex: index
-//               });
-//           }
-//       </script>
-//   </body>
-//   </html>
-//   `;
-// }
-
-//---------------------------------OLD CODE---------------------------------
-
-// context.subscriptions.push(
-//   vscode.window.onDidChangeActiveTextEditor((editor) => {
-//     if (editor && editor.document.fileName.endsWith(".cpp")) {
-//       const filePath = editor.document.fileName;
-//       const problemName = path.basename(filePath, ".cpp");
-//       const testCaseFilePath = getTestCaseFilePath(problemName);
-//       console.log("Test Case File Path:..........", testCaseFilePath);
-
-//       if (fs.existsSync(testCaseFilePath)) {
-//         console.log("Test cases found for:", problemName);
-//         const testCases = JSON.parse(
-//           fs.readFileSync(testCaseFilePath, "utf8")
-//         );
-//         console.log("Test Cases:..........", testCases);
-//       } else {
-//         console.log("No test cases found for:", problemName);
-//       }
-//     }
-//   })
-// );
-
-//---------------------------------OLD CODE---------------------------------
-
-// fs.watch(
-//   downloadsFolder,
-//   { persistent: true, recursive: false },
-//   (eventType, filename) => {
-//     if (eventType === "rename" && filename.endsWith(".html")) {
-//       const filePath = path.join(downloadsFolder, filename);
-
-//       setTimeout(() => {
-//         fs.stat(filePath, (err, stats) => {
-//           if (err) {
-//             console.error("Error accessing file:", err);
-//             return;
-//           }
-
-//           if (stats.isFile()) {
-//             console.log(`New HTML file detected: ${filePath}`);
-//             const htmlContent = fs.readFileSync(filePath, "utf-8");
-
-//             const testCases = extractTestCases(htmlContent);
-
-//             const outputChannel =
-//               vscode.window.createOutputChannel("Test Cases");
-//             outputChannel.show();
-//             testCases.forEach((testCase, index) => {
-//               outputChannel.appendLine(`Test Case ${index + 1}:`);
-//               outputChannel.appendLine(`  Input: ${testCase.input}`);
-//               outputChannel.appendLine(`  Output: ${testCase.output}`);
-//             });
-//           }
-//         });
-//       }, 1000);
-//     }
-//   }
-// );
-
-// const disposable = vscode.commands.registerCommand(
-//   "html-parser.extractTestCases",
-//   async () => {
-//     try {
-//       vscode.window.showInformationMessage(
-//         "Extract Test Cases command executed"
-//       );
-//       // Open file dialog to select HTML file
-//       const fileUri = await vscode.window.showOpenDialog({
-//         canSelectFiles: true,
-//         canSelectMany: false,
-//         filters: {
-//           "HTML Files": ["html"],
-//         },
-//       });
-
-//       if (fileUri && fileUri[0]) {
-//         console.log("File selected");
-
-//         const filePath = fileUri[0].fsPath;
-//         const htmlContent = fs.readFileSync(filePath, "utf-8");
-
-//         // Extract test cases
-//         const testCases = extractTestCases(htmlContent);
-
-//         // Display extracted test cases in the output channel
-//         const outputChannel = vscode.window.createOutputChannel("Test Cases");
-//         outputChannel.show();
-//         testCases.forEach((testCase, index) => {
-//           outputChannel.appendLine(`Test Case ${index + 1}:`);
-//           outputChannel.appendLine(`  Input: ${testCase.input}`);
-//           outputChannel.appendLine(`  Output: ${testCase.output}`);
-//         });
-//       } else {
-//         vscode.window.showErrorMessage("No file selected.");
-//       }
-//     } catch (error) {
-//       console.error(error);
-//       vscode.window.showErrorMessage("Error extracting test cases.");
-//     }
-//   }
-// );
-
-// context.subscriptions.push(disposable);
+//----------get cpp code of current file
+function getCurrentCode(filePath) {
+  try {
+    const code = fs.readFileSync(filePath, "utf-8");
+    return code;
+  } catch (error) {
+    console.error("Error reading the current file:", error);
+    return null;
+  }
+}

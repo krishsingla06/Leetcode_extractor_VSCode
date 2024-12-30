@@ -1,0 +1,203 @@
+//testerfun(parsedInput, parsedOutput, inputVariables);
+
+//---------------------------------------------END------------------------------------------------
+
+//---------------------------------OLD CODE---------------------------------
+
+// let testCasesView = null;
+
+// function getTestCaseFilePath(problemName) {
+//   const testCasesFolder = path.join(
+//     vscode.workspace.workspaceFolders[0].uri.fsPath,
+//     "test_cases"
+//   );
+//   return path.join(testCasesFolder, `${problemName}.json`);
+// }
+
+// function generateTestCasesHtml(problemName, testCases) {
+//   return `
+//   <!DOCTYPE html>
+//   <html lang="en">
+//   <head>
+//       <meta charset="UTF-8">
+//       <meta name="viewport" content="width=device-width, initial-scale=1.0">
+//       <title>${problemName} Test Cases</title>
+//       <style>
+//           body {
+//               font-family: Arial, sans-serif;
+//               margin: 0;
+//               padding: 0;
+//           }
+//           .container {
+//               padding: 10px;
+//               overflow-y: auto;
+//               max-height: 90vh;
+//           }
+//           h1 {
+//               font-size: 1.5rem;
+//               color: rgb(255, 255, 255);
+//           }
+//           .test-case {
+//               margin-bottom: 15px;
+//               padding: 10px;
+//               border: 1px solid #ccc;
+//               border-radius: 5px;
+//               background:rgb(8, 7, 7);
+//           }
+//           .test-case h2 {
+//               font-size: 1.2rem;
+//               margin: 0;
+//               color: rgb(255, 255, 255);
+//           }
+//           .test-case p {
+//               margin: 5px 0;
+//           }
+//           button {
+//               background: #007acc;
+//               color: white;
+//               border: none;
+//               padding: 5px 10px;
+//               border-radius: 3px;
+//               cursor: pointer;
+//           }
+//           button:hover {
+//               background: #005f99;
+//           }
+//       </style>
+//   </head>
+//   <body>
+//       <div class="container">
+//           <h1>Test Cases</h1>
+//           ${testCases
+//             .map(
+//               (testCase, index) => `
+//               <div class="test-case">
+//                   <h2>Test Case ${index + 1}</h2>
+//                   <p><strong>Input:</strong> <pre>${testCase.input}</pre></p>
+//                   <p><strong>Output:</strong> <pre>${testCase.output}</pre></p>
+//                   <button onclick="runTest(${index})">Run Test Case</button>
+//               </div>
+//           `
+//             )
+//             .join("")}
+//       </div>
+//       <script>
+//           const vscode = acquireVsCodeApi();
+
+//           function runTest(index) {
+//               console.log("Running test case:", index);
+//               vscode.postMessage({
+//                   command: "runTestCase",
+//                   testCaseIndex: index
+//               });
+//           }
+//       </script>
+//   </body>
+//   </html>
+//   `;
+// }
+
+//---------------------------------OLD CODE---------------------------------
+
+// context.subscriptions.push(
+//   vscode.window.onDidChangeActiveTextEditor((editor) => {
+//     if (editor && editor.document.fileName.endsWith(".cpp")) {
+//       const filePath = editor.document.fileName;
+//       const problemName = path.basename(filePath, ".cpp");
+//       const testCaseFilePath = getTestCaseFilePath(problemName);
+//       console.log("Test Case File Path:..........", testCaseFilePath);
+
+//       if (fs.existsSync(testCaseFilePath)) {
+//         console.log("Test cases found for:", problemName);
+//         const testCases = JSON.parse(
+//           fs.readFileSync(testCaseFilePath, "utf8")
+//         );
+//         console.log("Test Cases:..........", testCases);
+//       } else {
+//         console.log("No test cases found for:", problemName);
+//       }
+//     }
+//   })
+// );
+
+//---------------------------------OLD CODE---------------------------------
+
+// fs.watch(
+//   downloadsFolder,
+//   { persistent: true, recursive: false },
+//   (eventType, filename) => {
+//     if (eventType === "rename" && filename.endsWith(".html")) {
+//       const filePath = path.join(downloadsFolder, filename);
+
+//       setTimeout(() => {
+//         fs.stat(filePath, (err, stats) => {
+//           if (err) {
+//             console.error("Error accessing file:", err);
+//             return;
+//           }
+
+//           if (stats.isFile()) {
+//             console.log(`New HTML file detected: ${filePath}`);
+//             const htmlContent = fs.readFileSync(filePath, "utf-8");
+
+//             const testCases = extractTestCases(htmlContent);
+
+//             const outputChannel =
+//               vscode.window.createOutputChannel("Test Cases");
+//             outputChannel.show();
+//             testCases.forEach((testCase, index) => {
+//               outputChannel.appendLine(`Test Case ${index + 1}:`);
+//               outputChannel.appendLine(`  Input: ${testCase.input}`);
+//               outputChannel.appendLine(`  Output: ${testCase.output}`);
+//             });
+//           }
+//         });
+//       }, 1000);
+//     }
+//   }
+// );
+
+// const disposable = vscode.commands.registerCommand(
+//   "html-parser.extractTestCases",
+//   async () => {
+//     try {
+//       vscode.window.showInformationMessage(
+//         "Extract Test Cases command executed"
+//       );
+//       // Open file dialog to select HTML file
+//       const fileUri = await vscode.window.showOpenDialog({
+//         canSelectFiles: true,
+//         canSelectMany: false,
+//         filters: {
+//           "HTML Files": ["html"],
+//         },
+//       });
+
+//       if (fileUri && fileUri[0]) {
+//         console.log("File selected");
+
+//         const filePath = fileUri[0].fsPath;
+//         const htmlContent = fs.readFileSync(filePath, "utf-8");
+
+//         // Extract test cases
+//         const testCases = extractTestCases(htmlContent);
+
+//         // Display extracted test cases in the output channel
+//         const outputChannel = vscode.window.createOutputChannel("Test Cases");
+//         outputChannel.show();
+//         testCases.forEach((testCase, index) => {
+//           outputChannel.appendLine(`Test Case ${index + 1}:`);
+//           outputChannel.appendLine(`  Input: ${testCase.input}`);
+//           outputChannel.appendLine(`  Output: ${testCase.output}`);
+//         });
+//       } else {
+//         vscode.window.showErrorMessage("No file selected.");
+//       }
+//     } catch (error) {
+//       console.error(error);
+//       vscode.window.showErrorMessage("Error extracting test cases.");
+//     }
+//   }
+// );
+
+// context.subscriptions.push(disposable);
