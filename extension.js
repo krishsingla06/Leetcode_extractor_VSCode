@@ -12,6 +12,198 @@ const { DOMParser } = require("@xmldom/xmldom");
 //  * @returns An array of test cases with inputs and outputs.
 //  */
 
+class TestCaseTreeProvider {
+  constructor() {
+    this._onDidChangeTreeData = new vscode.EventEmitter();
+    this.onDidChangeTreeData = this._onDidChangeTreeData.event;
+    this.currentCppFile = null; // To track the active .cpp file
+  }
+
+  refresh() {
+    this._onDidChangeTreeData.fire();
+  }
+
+  getTestCases() {
+    if (!this.currentCppFile) {
+      return []; // No active .cpp file
+    }
+
+    const workspaceFolder = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+    if (!workspaceFolder) {
+      vscode.window.showErrorMessage("No workspace folder is open.");
+      return [];
+    }
+
+    const testCasesFolder = path.join(workspaceFolder, "test_cases");
+    const problemName = path.basename(this.currentCppFile, ".cpp");
+    const testCaseFilePath = path.join(testCasesFolder, `${problemName}.json`);
+
+    if (!fs.existsSync(testCaseFilePath)) {
+      return []; // No test case file for the active .cpp
+    }
+
+    try {
+      const fileContent = fs.readFileSync(testCaseFilePath, "utf-8");
+      const testCaseData = JSON.parse(fileContent);
+      return testCaseData.testCases || [];
+    } catch (err) {
+      console.error("Error reading test case file:", err);
+      vscode.window.showErrorMessage("Error reading test case file.");
+      return [];
+    }
+  }
+
+  /**
+   * Builds tree view items from test cases.
+   */
+  getTreeItems(testCases) {
+    return testCases.map((testCase, index) => {
+      const label = `Test Case ${index + 1}`;
+
+      // Create a custom tree item for each test case
+      const treeItem = new vscode.TreeItem(
+        label,
+        vscode.TreeItemCollapsibleState.None
+      );
+      treeItem.collapsibleState = vscode.TreeItemCollapsibleState.None;
+
+      // Format the input and output as a markdown string for better readability
+      const input = testCase.input
+        ? `**Input:**\n\`\`\`\n${testCase.input}\n\`\`\``
+        : "No Input";
+      const output = testCase.output
+        ? `**Output:**\n\`\`\`\n${testCase.output}\n\`\`\``
+        : "No Output";
+
+      // Setting markdown-like description (bold text with code blocks)
+      treeItem.tooltip = `${input}\n\n${output}`;
+      treeItem.description = `${input} | ${output}`;
+
+      // Adding the button for running the test case
+      const button = `Run Test Case ${index + 1}`;
+      treeItem.command = {
+        title: button,
+        command: "testCasesView.runTestCase",
+        arguments: [index], // Pass the index of the test case to run
+      };
+
+      return treeItem;
+    });
+  }
+
+  getChildren() {
+    const testCases = this.getTestCases();
+    return this.getTreeItems(testCases);
+  }
+
+  getTreeItem(element) {
+    return element;
+  }
+}
+
+function activate(context) {
+  console.log(
+    'Congratulations, your extension "leetcode-test-case-extractor" is now active!'
+  );
+
+  const testCaseProvider = new TestCaseTreeProvider();
+  vscode.window.registerTreeDataProvider("testCasesView", testCaseProvider);
+
+  // Register a command to run the test case
+  context.subscriptions.push(
+    vscode.commands.registerCommand("testCasesView.runTestCase", (index) => {
+      console.log(`Running test case ${index + 1}`);
+      // Placeholder for the function that runs the test case
+      // After running the test case, update the tree view with the result
+      vscode.window.showInformationMessage(`Running Test Case ${index + 1}...`);
+
+      // Refresh the tree view after running the test case
+      testCaseProvider.refresh();
+    })
+  );
+
+  // Refresh the tree view when the active editor changes
+  vscode.window.onDidChangeActiveTextEditor((editor) => {
+    if (editor && editor.document.fileName.endsWith(".cpp")) {
+      testCaseProvider.currentCppFile = editor.document.fileName;
+      testCaseProvider.refresh();
+    }
+  });
+
+  // Add a command to refresh manually
+  context.subscriptions.push(
+    vscode.commands.registerCommand("testCasesView.refresh", () => {
+      testCaseProvider.refresh();
+    })
+  );
+
+  // Trigger initial refresh if there's an active cpp file
+  if (vscode.window.activeTextEditor?.document.fileName.endsWith(".cpp")) {
+    testCaseProvider.currentCppFile =
+      vscode.window.activeTextEditor.document.fileName;
+    testCaseProvider.refresh();
+  }
+
+  //---------------------------------------------END------------------------------------------------
+
+  const downloadsFolder = path.join(require("os").homedir(), "Downloads");
+
+  // Watch the downloads folder for changes to HTML files
+  let debounceTimer;
+
+  fs.watch(
+    downloadsFolder,
+    { persistent: true, recursive: false },
+    (eventType, filename) => {
+      if (eventType === "rename" && filename.endsWith(".html")) {
+        const filePath = path.join(downloadsFolder, filename);
+
+        // Clear previous debounce timer if it's still active
+        clearTimeout(debounceTimer);
+
+        // Set new debounce timer
+        debounceTimer = setTimeout(async () => {
+          try {
+            const stats = await fs.promises.stat(filePath);
+
+            if (stats.isFile()) {
+              console.log(`New HTML file detected: ${filePath}`);
+
+              // Read the file asynchronously
+              const htmlContent = await fs.promises.readFile(filePath, "utf-8");
+
+              // Extract test cases
+              const testCases = extractTestCases(htmlContent);
+
+              // Show test cases in the output channel
+              const outputChannel =
+                vscode.window.createOutputChannel("Test Cases");
+              outputChannel.show();
+              testCases.forEach((testCase, index) => {
+                outputChannel.appendLine(`Test Case ${index + 1}:`);
+                outputChannel.appendLine(`  Input: ${testCase.input}`);
+                outputChannel.appendLine(`  Output: ${testCase.output}`);
+              });
+              saveTestCasesToFile(testCases, filename);
+              createProblemFiles(filename, null, testCases);
+            }
+          } catch (err) {
+            console.error("Error accessing file:", err);
+          }
+        }, 1000); // Debounce interval
+      }
+    }
+  );
+}
+
+function deactivate() {}
+
+module.exports = {
+  activate,
+  deactivate,
+};
+
+// For extracting test cases from LeetCode-like HTML content---------------------------------------
 function extractTestCases(html) {
   console.log("entered function....");
 
@@ -139,233 +331,125 @@ int main() {
     vscode.window.vscode.window.showTextDocument(doc);
   });
 }
+//---------------------------------------------END------------------------------------------------
 
-let testCasesPanel = null;
+//---------------------------------OLD CODE---------------------------------
 
-function createTestCasesPanel() {
-  testCasesPanel = vscode.window.createWebviewPanel(
-    "testCasesPanel",
-    "Test Cases",
-    vscode.ViewColumn.Beside, // Fixed to the side panel
-    {
-      enableScripts: true,
-      retainContextWhenHidden: true, // Keep panel alive when hidden
-      //preserveFocus: true, // Keep focus on the editor
-      viewColumn: vscode.ViewColumn.One,
-    }
-  );
+// let testCasesView = null;
 
-  testCasesPanel.onDidDispose(() => {
-    // Recreate the panel if closed
-    testCasesPanel = null;
-    createTestCasesPanel();
-  });
-}
+// function getTestCaseFilePath(problemName) {
+//   const testCasesFolder = path.join(
+//     vscode.workspace.workspaceFolders[0].uri.fsPath,
+//     "test_cases"
+//   );
+//   return path.join(testCasesFolder, `${problemName}.json`);
+// }
 
-function updateTestCasesPanel(problemName, testCases) {
-  if (!testCasesPanel) {
-    createTestCasesPanel();
-  }
+// function generateTestCasesHtml(problemName, testCases) {
+//   return `
+//   <!DOCTYPE html>
+//   <html lang="en">
+//   <head>
+//       <meta charset="UTF-8">
+//       <meta name="viewport" content="width=device-width, initial-scale=1.0">
+//       <title>${problemName} Test Cases</title>
+//       <style>
+//           body {
+//               font-family: Arial, sans-serif;
+//               margin: 0;
+//               padding: 0;
+//           }
+//           .container {
+//               padding: 10px;
+//               overflow-y: auto;
+//               max-height: 90vh;
+//           }
+//           h1 {
+//               font-size: 1.5rem;
+//               color: rgb(255, 255, 255);
+//           }
+//           .test-case {
+//               margin-bottom: 15px;
+//               padding: 10px;
+//               border: 1px solid #ccc;
+//               border-radius: 5px;
+//               background:rgb(8, 7, 7);
+//           }
+//           .test-case h2 {
+//               font-size: 1.2rem;
+//               margin: 0;
+//               color: rgb(255, 255, 255);
+//           }
+//           .test-case p {
+//               margin: 5px 0;
+//           }
+//           button {
+//               background: #007acc;
+//               color: white;
+//               border: none;
+//               padding: 5px 10px;
+//               border-radius: 3px;
+//               cursor: pointer;
+//           }
+//           button:hover {
+//               background: #005f99;
+//           }
+//       </style>
+//   </head>
+//   <body>
+//       <div class="container">
+//           <h1>Test Cases</h1>
+//           ${testCases
+//             .map(
+//               (testCase, index) => `
+//               <div class="test-case">
+//                   <h2>Test Case ${index + 1}</h2>
+//                   <p><strong>Input:</strong> <pre>${testCase.input}</pre></p>
+//                   <p><strong>Output:</strong> <pre>${testCase.output}</pre></p>
+//                   <button onclick="runTest(${index})">Run Test Case</button>
+//               </div>
+//           `
+//             )
+//             .join("")}
+//       </div>
+//       <script>
+//           const vscode = acquireVsCodeApi();
 
-  const htmlContent = generateTestCasesHtml(problemName, testCases);
-  testCasesPanel.webview.html = htmlContent;
-}
+//           function runTest(index) {
+//               console.log("Running test case:", index);
+//               vscode.postMessage({
+//                   command: "runTestCase",
+//                   testCaseIndex: index
+//               });
+//           }
+//       </script>
+//   </body>
+//   </html>
+//   `;
+// }
 
-function getTestCaseFilePath(problemName) {
-  const testCasesFolder = path.join(
-    vscode.workspace.workspaceFolders[0].uri.fsPath,
-    "test_cases"
-  );
-  return path.join(testCasesFolder, `${problemName}.json`);
-}
+//---------------------------------OLD CODE---------------------------------
 
-function generateTestCasesHtml(problemName, testCases) {
-  return `
-  <!DOCTYPE html>
-  <html lang="en">
-  <head>
-      <meta charset="UTF-8">
-      <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <title>${problemName} Test Cases</title>
-      <style>
-          body {
-              font-family: Arial, sans-serif;
-              margin: 0;
-              padding: 0;
-          }
-          .container {
-              padding: 10px;
-              overflow-y: auto;
-              max-height: 90vh;
-          }
-          h1 {
-              font-size: 1.5rem;
-              color: rgb(255, 255, 255);
-          }
-          .test-case {
-              margin-bottom: 15px;
-              padding: 10px;
-              border: 1px solid #ccc;
-              border-radius: 5px;
-              background:rgb(8, 7, 7);
-          }
-          .test-case h2 {
-              font-size: 1.2rem;
-              margin: 0;
-              color: rgb(255, 255, 255);
-          }
-          .test-case p {
-              margin: 5px 0;
-          }
-          button {
-              background: #007acc;
-              color: white;
-              border: none;
-              padding: 5px 10px;
-              border-radius: 3px;
-              cursor: pointer;
-          }
-          button:hover {
-              background: #005f99;
-          }
-      </style>
-  </head>
-  <body>
-      <div class="container">
-          <h1>Test Cases</h1>
-          ${testCases
-            .map(
-              (testCase, index) => `
-              <div class="test-case">
-                  <h2>Test Case ${index + 1}</h2>
-                  <p><strong>Input:</strong> <pre>${testCase.input}</pre></p>
-                  <p><strong>Output:</strong> <pre>${testCase.output}</pre></p>
-                  <button onclick="runTest(${index})">Run Test Case</button>
-              </div>
-          `
-            )
-            .join("")}
-      </div>
-      <script>
-          const vscode = acquireVsCodeApi();
-          
-          function runTest(index) {
-              console.log("Running test case:", index);
-              vscode.postMessage({
-                  command: "runTestCase",
-                  testCaseIndex: index
-              });
-          }
-      </script>
-  </body>
-  </html>
-  `;
-}
+// context.subscriptions.push(
+//   vscode.window.onDidChangeActiveTextEditor((editor) => {
+//     if (editor && editor.document.fileName.endsWith(".cpp")) {
+//       const filePath = editor.document.fileName;
+//       const problemName = path.basename(filePath, ".cpp");
+//       const testCaseFilePath = getTestCaseFilePath(problemName);
+//       console.log("Test Case File Path:..........", testCaseFilePath);
 
-function activate(context) {
-  console.log(
-    'Congratulations, your extension "leetcode-test-case-extractor" is now active!'
-  );
-
-  const downloadsFolder = path.join(require("os").homedir(), "Downloads");
-
-  // Watch the downloads folder for changes to HTML files
-  let debounceTimer;
-
-  fs.watch(
-    downloadsFolder,
-    { persistent: true, recursive: false },
-    (eventType, filename) => {
-      if (eventType === "rename" && filename.endsWith(".html")) {
-        const filePath = path.join(downloadsFolder, filename);
-
-        // Clear previous debounce timer if it's still active
-        clearTimeout(debounceTimer);
-
-        // Set new debounce timer
-        debounceTimer = setTimeout(async () => {
-          try {
-            const stats = await fs.promises.stat(filePath);
-
-            if (stats.isFile()) {
-              console.log(`New HTML file detected: ${filePath}`);
-
-              // Read the file asynchronously
-              const htmlContent = await fs.promises.readFile(filePath, "utf-8");
-
-              // Extract test cases
-              const testCases = extractTestCases(htmlContent);
-
-              // Show test cases in the output channel
-              const outputChannel =
-                vscode.window.createOutputChannel("Test Cases");
-              outputChannel.show();
-              testCases.forEach((testCase, index) => {
-                outputChannel.appendLine(`Test Case ${index + 1}:`);
-                outputChannel.appendLine(`  Input: ${testCase.input}`);
-                outputChannel.appendLine(`  Output: ${testCase.output}`);
-              });
-              saveTestCasesToFile(testCases, filename);
-              createProblemFiles(filename, null, testCases);
-              //createFileWithTemplateAndTestCases(filename);
-              // createCppFileWithTemplate(filename);
-              // showTestCasesInWebView(testCases);
-            }
-          } catch (err) {
-            console.error("Error accessing file:", err);
-          }
-        }, 1000); // Debounce interval
-      }
-    }
-  );
-
-  context.subscriptions.push(
-    vscode.window.onDidChangeActiveTextEditor((editor) => {
-      if (editor && editor.document.fileName.endsWith(".cpp")) {
-        const filePath = editor.document.fileName;
-        const problemName = path.basename(filePath, ".cpp");
-        const testCaseFilePath = getTestCaseFilePath(problemName);
-        console.log("Test Case File Path:..........", testCaseFilePath);
-
-        if (fs.existsSync(testCaseFilePath)) {
-          console.log("Test cases found for:", problemName);
-          const testCases = JSON.parse(
-            fs.readFileSync(testCaseFilePath, "utf8")
-          );
-          console.log("Test Cases:..........", testCases);
-          updateTestCasesPanel(problemName, testCases.testCases);
-        } else {
-          console.log("No test cases found for:", problemName);
-          updateTestCasesPanel(problemName, []); // Empty if no test cases exist
-        }
-      }
-    })
-  );
-
-  context.subscriptions.push(
-    vscode.commands.registerCommand("html-parser.openTestCases", () => {
-      if (!testCasesPanel) {
-        createTestCasesPanel();
-      }
-    })
-  );
-
-  // Ensure the panel is always active when switching files
-  context.subscriptions.push(
-    vscode.workspace.onDidChangeWorkspaceFolders(() => {
-      if (!testCasesPanel) {
-        createTestCasesPanel();
-      }
-    })
-  );
-}
-
-function deactivate() {}
-
-module.exports = {
-  activate,
-  deactivate,
-};
+//       if (fs.existsSync(testCaseFilePath)) {
+//         console.log("Test cases found for:", problemName);
+//         const testCases = JSON.parse(
+//           fs.readFileSync(testCaseFilePath, "utf8")
+//         );
+//         console.log("Test Cases:..........", testCases);
+//       } else {
+//         console.log("No test cases found for:", problemName);
+//       }
+//     }
+//   })
+// );
 
 //---------------------------------OLD CODE---------------------------------
 

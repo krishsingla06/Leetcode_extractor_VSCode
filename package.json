@@ -11,15 +11,32 @@
   ],
   "activationEvents": [
     "*",
-    "onCommand:html-parser.openTestCases"
+    "onView:testCasesView",
+    "onDidChangeActiveTextEditor"
   ],
   "main": "./extension.js",
   "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "testCasesContainer",
+          "title": "Test Cases",
+          "icon": "smiley.svg"
+        }
+      ]
+    },
+    "views": {
+      "testCasesContainer": [
+        {
+          "id": "testCasesView",
+          "name": "Test Cases"
+        }
+      ]
+    },
     "commands": [
       {
-        "command": "html-parser.openTestCases",
-        "title": "Open Test Cases",
-        "category": "HTML Parser"
+        "command": "testCasesView.refresh",
+        "title": "Refresh Test Cases"
       }
     ]
   },
@@ -36,13 +53,5 @@
     "@vscode/test-electron": "^2.4.1",
     "@xmldom/xmldom": "^0.8.10",
     "eslint": "^9.16.0"
-  },
-  "views": {
-    "explorer": [
-      {
-        "id": "testCasesView",
-        "name": "Test Cases"
-      }
-    ]
   }
 }
