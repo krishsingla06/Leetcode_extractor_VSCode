@@ -2,15 +2,10 @@ const vscode = require("vscode");
 const fs = require("fs");
 const path = require("path");
 const { DOMParser } = require("@xmldom/xmldom");
+
 /**
  * @param {vscode.ExtensionContext} context
  */
-
-// /**
-//  * Extracts test cases from LeetCode-like HTML content.
-//  * @param html - The HTML string to extract test cases from.
-//  * @returns An array of test cases with inputs and outputs.
-//  */
 
 function activate(context) {
   console.log(
@@ -28,13 +23,17 @@ function activate(context) {
       "testCasesView.runTestCase",
       (index, input, output) => {
         console.log(`Running test case ${index + 1}`);
-        input = input.replace("**Input:**", "");
-        output = output.replace("**Output:**", "");
-        let parsedInput = parseInput(input);
+        console.log(input);
+        console.log(output);
+        let parsedInputandvariblenames = parseAndFormat(input);
+        let parsedInput = parsedInputandvariblenames.formattedCode;
+        let variableNames = parsedInputandvariblenames.variables;
         let parsedOutput = parseOutput(output);
         console.log(`"Parsed Test Cases:",${parsedInput}, ${parsedOutput}`);
-        vscode.window.showInformationMessage(`Running Test Case ${index + 1}`);
-        let variableNames = parseVariableNames(parsedInput);
+        vscode.window.showInformationMessage(
+          `"Parsed Test Cases:",${parsedInput}, ${parsedOutput}`
+        );
+        //vscode.window.showInformationMessage(`Running Test Case ${index + 1}`);
         console.log(`Variable Names:`, variableNames);
         const activeEditor = vscode.window.activeTextEditor;
         if (activeEditor) {
@@ -195,16 +194,12 @@ class TestCaseTreeProvider {
       treeItem.collapsibleState = vscode.TreeItemCollapsibleState.None;
 
       // Format the input and output as a markdown string for better readability
-      const input = testCase.input
-        ? `**Input:**\n\`\`\`\n${testCase.input}\n\`\`\``
-        : "No Input";
-      const output = testCase.output
-        ? `**Output:**\n\`\`\`\n${testCase.output}\n\`\`\``
-        : "No Output";
+      const input = testCase.input ? testCase.input : "No Input";
+      const output = testCase.output ? testCase.output : "No Output";
 
       // Setting markdown-like description (bold text with code blocks)
-      treeItem.tooltip = `${input}\n\n${output}`;
-      treeItem.description = `${input} | ${output}`;
+      treeItem.tooltip = `Input : \n${input}\nOutput : \n${output}`;
+      treeItem.description = `Input = ${input} | Output = ${output}`;
 
       // Adding the button for running the test case
       const button = `Run Test Case ${index + 1}`;
@@ -229,14 +224,68 @@ class TestCaseTreeProvider {
 }
 
 //----------------------Parser----------------------------------
-function parseInput(inputString) {
-  // Remove any leading or trailing whitespace
-  let inputContent = inputString.trim();
-  // Add 'auto' keyword to variable assignments
-  inputContent = inputContent.replace(/(\w+)\s*=\s*/g, "auto $1 ="); // Modify variable assignments
-  inputContent += ";"; // Add semicolon to the input
 
-  return inputContent;
+function parseAndFormat(input) {
+  let result = "";
+  let variableNames = [];
+
+  const regex = /(\w+)\s*=/g;
+  let match;
+  while ((match = regex.exec(input)) !== null) {
+    variableNames.push(match[1]);
+  }
+
+  // Control flags and counters
+  let canInsertAuto = true;
+  //let canChangeBraces = true;
+  let canChangeComma = true;
+  let arrayDepth = 0;
+  let insideString = false;
+
+  for (let i = 0; i < input.length; i++) {
+    const char = input[i];
+    if (char === '"' || char === "'") {
+      insideString = !insideString;
+      //canChangeBraces = !insideString;
+      canChangeComma = !insideString;
+    }
+
+    if (!insideString) {
+      if (char === "[") {
+        arrayDepth++;
+        if (arrayDepth === 1) {
+          canChangeComma = false;
+        }
+        result += "{";
+        continue;
+      } else if (char === "]") {
+        result += "}";
+        arrayDepth--;
+        if (arrayDepth === 0) {
+          canChangeComma = true;
+        }
+        continue;
+      }
+
+      if (char === "," && canChangeComma && arrayDepth === 0) {
+        result += " ; ";
+        canInsertAuto = true;
+        continue;
+      }
+
+      if (canInsertAuto) {
+        result += "auto ";
+        canInsertAuto = false;
+      }
+    }
+    result += char;
+  }
+
+  console.log("returning : ", result);
+  return {
+    variables: variableNames,
+    formattedCode: result,
+  };
 }
 
 function parseOutput(outputString) {
@@ -244,22 +293,6 @@ function parseOutput(outputString) {
   let outputContent = "auto expected = " + outputString.trim() + ";";
   return outputContent;
 }
-
-function parseVariableNames(input) {
-  // Regular expression to capture variable names between 'auto' and '='
-  const regex = /auto\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*=/g;
-  const variableNames = [];
-  let match;
-
-  // Loop through all matches and extract variable names
-  while ((match = regex.exec(input)) !== null) {
-    const varName = match[1]; // Extracted variable name
-    variableNames.push(varName); // Store the variable name
-  }
-
-  return variableNames;
-}
-
 //-----------For extracting test cases from LeetCode-like HTML content---------------------------------------
 function extractTestCases(html) {
   console.log("entered function....");
