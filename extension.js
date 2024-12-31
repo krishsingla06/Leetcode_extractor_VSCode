@@ -7,6 +7,8 @@ const { DOMParser } = require("@xmldom/xmldom");
  * @param {vscode.ExtensionContext} context
  */
 
+const { exec } = require("child_process");
+
 function activate(context) {
   console.log(
     'Congratulations, your extension "leetcode-test-case-extractor" is now active! -> Testing !!!'
@@ -21,14 +23,14 @@ function activate(context) {
   context.subscriptions.push(
     vscode.commands.registerCommand(
       "testCasesView.runTestCase",
-      (index, input, output) => {
+      (index, input, output, paramTypes, returnType) => {
         console.log(`Running test case ${index + 1}`);
         console.log(input);
         console.log(output);
-        let parsedInputandvariblenames = parseAndFormat(input);
+        let parsedInputandvariblenames = parseAndFormat(input, paramTypes);
         let parsedInput = parsedInputandvariblenames.formattedCode;
         let variableNames = parsedInputandvariblenames.variables;
-        let parsedOutput = parseOutput(output);
+        let parsedOutput = parseOutput(output, returnType);
         console.log(`"Parsed Test Cases:",${parsedInput}, ${parsedOutput}`);
         vscode.window.showInformationMessage(
           `"Parsed Test Cases:",${parsedInput}, ${parsedOutput}`
@@ -98,9 +100,14 @@ function activate(context) {
 
               // Read the file asynchronously
               const htmlContent = await fs.promises.readFile(filePath, "utf-8");
-
               // Extract test cases
-              const testCases = extractTestCases(htmlContent);
+              const testcasesAndBoilerplate = extractTestCases(htmlContent);
+              const testCases = testcasesAndBoilerplate.testCases;
+              const boilerplate = testcasesAndBoilerplate.boilerplate;
+
+              console.log("Boilerplate:", boilerplate);
+              const iodatatypes = parseFunctionSignature(boilerplate);
+              console.log("Function Signature:", iodatatypes);
 
               // Show test cases in the output channel
               const outputChannel =
@@ -111,8 +118,8 @@ function activate(context) {
                 outputChannel.appendLine(`  Input: ${testCase.input}`);
                 outputChannel.appendLine(`  Output: ${testCase.output}`);
               });
-              saveTestCasesToFile(testCases, filename);
-              createProblemFiles(filename, null, testCases);
+              //saveTestCasesToFile(testCases, filename); just saving it to downloads folder , nothing else
+              createProblemFiles(filename, boilerplate, testCases, iodatatypes);
             }
           } catch (err) {
             console.error("Error accessing file:", err);
@@ -130,6 +137,48 @@ module.exports = {
   activate,
   deactivate,
 };
+
+//------------------Function Signature Parser-------------------
+
+function parseFunctionSignature(functionSignature) {
+  // Regex to extract the return type and parameter types
+  const regex = /([a-zA-Z0-9<>&\[\]]+)\s+([a-zA-Z0-9_]+)\s*\((.*)\)/;
+
+  // Match the function signature using regex
+  const match = functionSignature.match(regex);
+
+  if (!match) {
+    console.error("Invalid function signature");
+    return;
+  }
+
+  // Extract return type and parameters
+  const returnTypewithampercent = match[1]; // The return type is the first capture group
+  const paramsStringwithampercent = match[3]; // The parameter types are in the third capture group
+  const returnType = returnTypewithampercent.replace("&", ""); // Remove the & symbol
+  const paramsString = paramsStringwithampercent.replace("&", ""); // Remove the & symbol
+  console.log("paramsString:", paramsString);
+  // Now, extract the parameter data types
+  const paramTypes = paramsString.split(",").map((param) => {
+    // Clean up spaces and extract only the data type part
+    const dataType = param.trim().split(" ")[0];
+    return dataType;
+  });
+
+  // Return the result as an object
+  return {
+    returnType,
+    paramTypes,
+  };
+}
+
+// // Example usage
+// const functionSignature =
+//   "vector<long> nextPermutation(vector<int>& nums , string s, int a, vector<vector<int>> &b)";
+// const result = parseFunctionSignature(functionSignature);
+
+// console.log("Return Type:", result.returnType); // vector<long>
+// console.log("Parameter Data Types:", result.paramTypes); // ['vector<int>', 'string', 'int', 'vector<vector<int>>']
 
 //------------------Sidebar-------------------
 
@@ -191,6 +240,12 @@ class TestCaseTreeProvider {
       // Format the input and output as a markdown string for better readability
       const input = testCase.input ? testCase.input : "No Input";
       const output = testCase.output ? testCase.output : "No Output";
+      const paramTypes = testCase.iodatatypes.paramTypes
+        ? testCase.iodatatypes.paramTypes
+        : [];
+      const returnType = testCase.iodatatypes.returnType
+        ? testCase.iodatatypes.returnType
+        : "";
 
       // Setting markdown-like description (bold text with code blocks)
       treeItem.tooltip = `Input : \n${input}\nOutput : \n${output}`;
@@ -201,7 +256,7 @@ class TestCaseTreeProvider {
       treeItem.command = {
         title: button,
         command: "testCasesView.runTestCase",
-        arguments: [index, input, output], // Pass the index of the test case to run
+        arguments: [index, input, output, paramTypes, returnType], // Pass the index of the test case to run
       };
 
       return treeItem;
@@ -220,8 +275,7 @@ class TestCaseTreeProvider {
 
 //----------------------Parser----------------------------------
 
-function parseAndFormat(input) {
-  let result = "";
+function parseAndFormat(input, paramTypes) {
   let variableNames = [];
 
   const regex = /(\w+)\s*=/g;
@@ -231,6 +285,8 @@ function parseAndFormat(input) {
   }
 
   // Control flags and counters
+  let result = "";
+  let idx = 0;
   let canInsertAuto = true;
   //let canChangeBraces = true;
   let canChangeComma = true;
@@ -269,7 +325,8 @@ function parseAndFormat(input) {
       }
 
       if (canInsertAuto) {
-        result += "auto ";
+        result += paramTypes[idx] + " ";
+        idx += 1;
         canInsertAuto = false;
       }
     }
@@ -285,25 +342,73 @@ function parseAndFormat(input) {
   };
 }
 
-function parseOutput(outputString) {
+function parseOutput(outputString, returnType) {
+  let result = "";
+  // let idx = 0;
+  //let canInsertAuto = true;
+  //let canChangeBraces = true;
+  // let canChangeComma = true;
+  //let arrayDepth = 0;
+  let insideString = false;
+
+  for (let i = 0; i < outputString.length; i++) {
+    const char = outputString[i];
+    if (char === '"' || char === "'") {
+      insideString = !insideString;
+      //canChangeBraces = !insideString;
+      //canChangeComma = !insideString;
+    }
+
+    if (!insideString) {
+      if (char === "[") {
+        //arrayDepth++;
+        // if (arrayDepth === 1) {
+        //   canChangeComma = false;
+        // }
+        result += "{";
+        continue;
+      } else if (char === "]") {
+        result += "}";
+        //arrayDepth--;
+        // if (arrayDepth === 0) {
+        //   canChangeComma = true;
+        // }
+        continue;
+      }
+
+      // if (char === "," && canChangeComma && arrayDepth === 0) {
+      //   result += " ; ";
+      //   canInsertAuto = true;
+      //   continue;
+      // }
+
+      // if (canInsertAuto) {
+      //   result += paramTypes[idx] + " ";
+      //   idx += 1;
+      //   canInsertAuto = false;
+      // }
+    }
+    result += char;
+  }
+  //result += " ;";
   // Remove any leading or trailing whitespace
-  let outputContent = "auto expected = " + outputString.trim() + ";";
+  let outputContent = returnType + "  expected = " + result.trim() + ";";
   return outputContent;
 }
 //-----------For extracting test cases from LeetCode-like HTML content---------------------------------------
+
 function extractTestCases(html) {
-  console.log("entered function....");
+  console.log("Entered function...");
 
   const parser = new DOMParser();
   const doc = parser.parseFromString(html, "text/html");
 
-  // Check if doc is parsed correctly
   console.log("Parsed HTML document:");
   console.log(doc);
 
   const testCases = [];
 
-  // Convert NodeList to an array and check for strong tags
+  // Extract test cases
   const strongElements = Array.from(doc.getElementsByTagName("strong"));
 
   console.log("Found strong elements:");
@@ -317,7 +422,6 @@ function extractTestCases(html) {
   let currentInput = null;
 
   strongElements.forEach((element) => {
-    // Explicitly cast `element` as a `Node` from `xmldom`
     const strongElement = element;
     const text = strongElement.textContent?.trim();
 
@@ -339,11 +443,51 @@ function extractTestCases(html) {
     }
   });
 
-  console.log("Extracted test cases:", testCases);
-  return testCases;
+  // Locate elements with class "view-lines monaco-mouse-cursor-text"
+  const elements = Array.from(doc.getElementsByTagName("div"));
+
+  let boilerplateText = "";
+
+  elements.forEach((element) => {
+    if (
+      element.getAttribute("class") === "view-lines monaco-mouse-cursor-text"
+    ) {
+      // Extract text content from child nodes
+      boilerplateText = Array.from(element.childNodes)
+        .map((node) => node.textContent.trim())
+        .join("\n");
+    }
+  });
+
+  if (!boilerplateText) {
+    console.log("Boilerplate container not found.");
+  }
+
+  boilerplateText = sanitizeText(boilerplateText);
+
+  //console.log("boilerplateText:", boilerplateText);
+
+  //return testCases;
+
+  return { testCases: testCases, boilerplate: boilerplateText };
+
+  //return { testCases, boilerplate };
+}
+
+// Function to sanitize the extracted text
+function sanitizeText(text) {
+  // Replace non-breaking spaces with regular spaces
+  text = text.replace(/\u00A0/g, " ");
+  // Replace smart quotes with regular quotes
+  text = text.replace(/[“”]/g, '"').replace(/[‘’]/g, "'");
+  // Optionally, remove any other non-printable characters
+  text = text.replace(/[\x00-\x1F\x7F]/g, ""); // Remove control characters
+  // Return the sanitized text
+  return text;
 }
 
 function saveTestCasesToFile(testCases, filename) {
+  // baad mei use karunga ise
   const downloadsFolder = path.join(require("os").homedir(), "Downloads");
   //remove the .html extension
   filename = filename.replace(".html", "");
@@ -375,7 +519,7 @@ function saveTestCasesToFile(testCases, filename) {
   }
 }
 
-function createProblemFiles(problemName, templateCode, testCases) {
+function createProblemFiles(problemName, templateCode, testCases, iodatatypes) {
   problemName = problemName.replace(".html", "");
   const workspaceFolder = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
   if (!workspaceFolder) {
@@ -395,22 +539,36 @@ function createProblemFiles(problemName, templateCode, testCases) {
 
   // Create .cpp file
   const cppTemplate =
-    templateCode ||
     `
-#include <iostream>
+#include <bits/stdc++.h>
 using namespace std;
 
-int main() {
-  // Solution code here
-  return 0;
-}
-`;
+//You can't change class name and funtion name\n
+` + templateCode;
   fs.writeFileSync(cppFilePath, cppTemplate.trim());
 
-  // Create test cases file
+  // const testCaseData = {
+  //   testCases: testCases || [],
+  //   iodatatypes: iodatatypes || [],
+  // };
+
+  // // Write the combined data to the file
+  // fs.writeFileSync(testCaseFilePath, JSON.stringify(testCaseData, null, 2));
+
   const testCaseData = {
-    testCases: testCases || [],
+    testCases: testCases.map(() => ({
+      // Each test case will have its own iodatypes
+      iodatatypes: iodatatypes,
+    })),
   };
+
+  // Adding the specific test case data
+  testCaseData.testCases.forEach((testCase, index) => {
+    testCase.input = testCases[index].input;
+    testCase.output = testCases[index].output;
+  });
+
+  // Write the modified data to the file
   fs.writeFileSync(testCaseFilePath, JSON.stringify(testCaseData, null, 2));
 
   // Open .cpp file in editor
@@ -420,9 +578,8 @@ int main() {
 }
 
 //---------------------------------------------Compile and run------------------------------------------------
-
-const { exec } = require("child_process");
-
+// const { exec } = require("child_process");
+// const fs = require("fs");
 // Function to write the parsed content to bgrunner.cpp
 function updateCppFile(currentcode, parsedInput, parsedOutput, inputVariables) {
   // Path to your C++ file
@@ -507,9 +664,9 @@ function restoreOriginalCpp() {
 }
 
 // Example parsed input, output, and variable list
-const parsedInputkk = "auto nums = {3, 2, 2, 3} ; auto val = 2;"; // Example input
-const parsedOutputkk = "auto expectedoutput = 'a';"; // Example output
-const inputVariableskk = ["nums", "val"]; // List of variable names
+// const parsedInputkk = "auto nums = {3, 2, 2, 3} ; auto val = 2;"; // Example input
+// const parsedOutputkk = "auto expectedoutput = 'a';"; // Example output
+// const inputVariableskk = ["nums", "val"]; // List of variable names
 
 // Update the C++ file with parsed input, output, and function call
 
@@ -529,12 +686,12 @@ async function testerfun(
 }
 
 //----------get cpp code of current file
-function getCurrentCode(filePath) {
-  try {
-    const code = fs.readFileSync(filePath, "utf-8");
-    return code;
-  } catch (error) {
-    console.error("Error reading the current file:", error);
-    return null;
-  }
-}
+// function getCurrentCode(filePath) {
+//   try {
+//     const code = fs.readFileSync(filePath, "utf-8");
+//     return code;
+//   } catch (error) {
+//     console.error("Error reading the current file:", error);
+//     return null;
+//   }
+// }
