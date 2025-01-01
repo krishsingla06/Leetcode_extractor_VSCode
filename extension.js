@@ -325,46 +325,6 @@ class TestCaseTreeProvider {
     }
   }
 
-  /**
-   * Builds tree view items from test cases.
-   */
-  // getTreeItems(testCases) {
-  //   return testCases.map((testCase, index) => {
-  //     const label = `Test Case ${index + 1}`;
-
-  //     // Create a custom tree item for each test case
-  //     const treeItem = new vscode.TreeItem(
-  //       label,
-  //       vscode.TreeItemCollapsibleState.None
-  //     );
-  //     treeItem.collapsibleState = vscode.TreeItemCollapsibleState.None;
-
-  //     // Format the input and output as a markdown string for better readability
-  //     const input = testCase.input ? testCase.input : "No Input";
-  //     const output = testCase.output ? testCase.output : "No Output";
-  //     const paramTypes = testCase.iodatatypes.paramTypes
-  //       ? testCase.iodatatypes.paramTypes
-  //       : [];
-  //     const returnType = testCase.iodatatypes.returnType
-  //       ? testCase.iodatatypes.returnType
-  //       : "";
-
-  //     // Setting markdown-like description (bold text with code blocks)
-  //     treeItem.tooltip = `Input : \n${input}\nOutput : \n${output}`;
-  //     treeItem.description = `Input = ${input} | Output = ${output}`;
-
-  //     // Adding the button for running the test case
-  //     const button = `Run Test Case ${index + 1}`;
-  //     treeItem.command = {
-  //       title: button,
-  //       command: "testCasesView.runTestCase",
-  //       arguments: [index, input, output, paramTypes, returnType], // Pass the index of the test case to run
-  //     };
-
-  //     return treeItem;
-  //   });
-  // }
-
   // Required method to resolve each tree item
   getTreeItem(element) {
     // Add icons for result items
@@ -406,11 +366,6 @@ class TestCaseTreeProvider {
     return element.children || []; // Return children of the given item
   }
 
-  // Method to refresh the tree
-  // refresh() {
-  //   this._onDidChangeTreeData.fire();
-  // }
-
   // Method to run a single test case
   async runTest(testCase) {
     const resultChild = testCase.children[3];
@@ -419,6 +374,7 @@ class TestCaseTreeProvider {
     const iodatatypes = testCase.children[2].contextValue;
     const paramTypes = iodatatypes.paramTypes;
     const returnType = iodatatypes.returnType;
+    const funName = iodatatypes.funName;
     console.log("Pressed Run Button");
     console.log("Input: ", input);
     console.log("Output: ", output);
@@ -449,7 +405,8 @@ class TestCaseTreeProvider {
         cppContent,
         parsedInput,
         parsedOutput,
-        variableNames
+        variableNames,
+        funName
       );
 
       if (resultChild) {
@@ -625,6 +582,16 @@ function parseOutput(outputString, returnType) {
 }
 //-----------For extracting test cases from LeetCode-like HTML content---------------------------------------
 
+function formatJSONString(str) {
+  try {
+    // Attempt to parse and stringify for proper formatting
+    const parsed = JSON.parse(str);
+    return JSON.stringify(parsed, null, 2); // Pretty-print with 2 spaces
+  } catch {
+    return str; // Return as is if not valid JSON
+  }
+}
+
 function extractTestCases(html) {
   console.log("Entered function...");
 
@@ -656,16 +623,35 @@ function extractTestCases(html) {
     console.log("Element Text:", text);
 
     if (text === "Input:") {
-      const inputText = strongElement.nextSibling?.textContent?.trim();
+      let inputText = strongElement.nextSibling?.textContent?.trim();
       console.log("Found Input Text:", inputText);
       if (inputText) {
         currentInput = inputText;
+      } else {
+        const inputSpan =
+          strongElement.parentNode?.getElementsByTagName("span")[0];
+        console.log("Input Span:", inputSpan);
+        currentInput = inputSpan?.textContent;
       }
     } else if (text === "Output:" && currentInput) {
-      const outputText = strongElement.nextSibling?.textContent?.trim();
+      let outputText = strongElement.nextSibling?.textContent?.trim();
       console.log("Found Output Text:", outputText);
       if (outputText) {
         testCases.push({ input: currentInput, output: outputText });
+        currentInput = null; // Reset for the next case
+      } else {
+        const outputSpan =
+          strongElement.parentNode?.getElementsByTagName("span")[0];
+
+        console.log("Output Span:", outputSpan);
+
+        // Get the text content of the <span>
+        outputText = outputSpan?.textContent;
+        if (outputText) {
+          currentInput = sanitizeText(currentInput);
+          outputText = sanitizeText(outputText);
+          testCases.push({ input: currentInput, output: outputText });
+        }
         currentInput = null; // Reset for the next case
       }
     }
@@ -682,7 +668,7 @@ function extractTestCases(html) {
     ) {
       // Extract text content from child nodes
       boilerplateText = Array.from(element.childNodes)
-        .map((node) => node.textContent.trim())
+        .map((node) => node.textContent)
         .join("\n");
     }
   });
@@ -741,7 +727,12 @@ function saveTestCasesToFile(testCases, filename) {
   }
 }
 
-function createProblemFiles(problemName, templateCode, testCases, iodatatypes) {
+async function createProblemFiles(
+  problemName,
+  templateCode,
+  testCases,
+  iodatatypes
+) {
   problemName = problemName.replace(".html", "");
   const workspaceFolder = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
   if (!workspaceFolder) {
@@ -756,7 +747,7 @@ function createProblemFiles(problemName, templateCode, testCases, iodatatypes) {
 
   // Ensure test_cases folder exists
   if (!fs.existsSync(testCaseFolder)) {
-    fs.mkdirSync(testCaseFolder);
+    await fs.mkdirSync(testCaseFolder);
   }
 
   // Create .cpp file
@@ -767,7 +758,7 @@ using namespace std;
 
 //You can't change class name and funtion name\n
 ` + templateCode;
-  fs.writeFileSync(cppFilePath, cppTemplate.trim());
+  await fs.writeFileSync(cppFilePath, cppTemplate.trim());
 
   const testCaseData = {
     testCases: testCases.map(() => ({
@@ -782,7 +773,10 @@ using namespace std;
   });
 
   // Write the modified data to the file
-  fs.writeFileSync(testCaseFilePath, JSON.stringify(testCaseData, null, 2));
+  await fs.writeFileSync(
+    testCaseFilePath,
+    JSON.stringify(testCaseData, null, 2)
+  );
 
   // Open .cpp file in editor
   vscode.workspace.openTextDocument(cppFilePath).then((doc) => {
@@ -796,7 +790,8 @@ async function updateCppFile(
   currentcode,
   parsedInput,
   parsedOutput,
-  inputVariables
+  inputVariables,
+  funName
 ) {
   // Path to your C++ file
   const cppFilePath = "./bgrunner.cpp";
@@ -816,8 +811,10 @@ async function updateCppFile(
   // Prepare the code to insert
   const inputString = parsedInput; // Example of parsed input
   const outputString = parsedOutput; // Example of parsed output
-  const funCall = `fun(${inputVariables.join(", ")});`;
-  const nxtline = `if (expected == fun(${inputVariables.join(", ")}))`;
+  // const funCall = `fun(${inputVariables.join(", ")});`;
+  const nxtline = `if (expected == krish.${funName}(${inputVariables.join(
+    ", "
+  )}))`;
   //if (expectedoutput == fun(nums, val))
 
   // Insert the parsed input and output and the function call
@@ -828,8 +825,7 @@ async function updateCppFile(
     "\n" +
     outputString +
     "\n" +
-    funCall +
-    "\n" +
+    "Solution krish;\n" +
     nxtline +
     cppContent.slice(insertIndex + "// add your code here".length);
 
@@ -884,33 +880,6 @@ async function compileAndRunCpp() {
   }
 }
 
-// Function to compile and run the C++ file
-// async function compileAndRunCpp() {
-//   // Compile the C++ file
-//   console.log("Entered Compile and run function");
-//   exec("g++ bgrunner.cpp -o kkk.exe", (err, stdout, stderr) => {
-//     if (err) {
-//       console.error(`Error compiling: ${stderr}`);
-//       return err;
-//     }
-
-//     console.log("C++ code compiled successfully!");
-
-//     // Run the compiled executable
-//     exec("kkk.exe", (err, stdout, stderr) => {
-//       if (err) {
-//         console.error(`Error running C++ code: ${stderr}`);
-//         return err;
-//       }
-
-//       // Output from the C++ program
-//       console.log(`C++ Output: ${stdout}`);
-//       //popup in vscode showing result
-//       return stdout;
-//     });
-//   });
-// }
-
 // Function to restore the original content from bgrunnerpermanent.cpp to bgrunner.cpp
 async function restoreOriginalCpp() {
   // Read the content of bgrunnerpermanent.cpp
@@ -927,14 +896,21 @@ async function testerfun(
   currentcode,
   parsedInput,
   parsedOutput,
-  inputVariables
+  inputVariables,
+  funName
 ) {
   console.log("Kuch nhi kiya");
   console.log("Restoring stated");
   await restoreOriginalCpp();
   console.log("restoring ended");
   console.log("updating started");
-  await updateCppFile(currentcode, parsedInput, parsedOutput, inputVariables);
+  await updateCppFile(
+    currentcode,
+    parsedInput,
+    parsedOutput,
+    inputVariables,
+    funName
+  );
   console.log("updating end");
   console.log("compile and run start");
   let resp = await compileAndRunCpp();
@@ -961,6 +937,7 @@ function parseFunctionSignature(functionSignature) {
 
   // Extract return type and parameters
   const returnTypewithampercent = match[1]; // The return type is the first capture group
+  const funName = match[2]; // The function name is in the second capture group
   const paramsStringwithampercent = match[3]; // The parameter types are in the third capture group
   const returnType = returnTypewithampercent.replace("&", ""); // Remove the & symbol
   const paramsString = paramsStringwithampercent.replace("&", ""); // Remove the & symbol
@@ -976,5 +953,6 @@ function parseFunctionSignature(functionSignature) {
   return {
     returnType,
     paramTypes,
+    funName,
   };
 }
