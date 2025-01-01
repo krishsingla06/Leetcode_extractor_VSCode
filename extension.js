@@ -16,6 +16,9 @@ function activate(context) {
     'Congratulations, your extension "leetcode-test-case-extractor" is now active!'
   );
 
+  //console.log(context.extensionPath);
+  vscode.window.showInformationMessage(context.extensionPath);
+
   //------Side bar ka UI-UX
 
   const testCaseProvider = new TestCaseTreeProvider();
@@ -105,6 +108,13 @@ function activate(context) {
     testCaseProvider.deleteTestCase(item);
     vscode.window.showInformationMessage(`Test case '${item.label}' deleted.`);
   });
+
+  vscode.commands.registerCommand("testCaseView.saveTestCases", () => {
+    vscode.window.showInformationMessage("Saving test cases...");
+    testCaseProvider.saveTestCases();
+  });
+
+  //context.subscriptions.push(saveCommand);
 
   //------Code to watch whether new HTML file is downloaded or not, if yes, fetch its IO and generate boilerplate (Leetcode template fetching pending)------------------------------------------------
   const downloadsFolder = path.join(require("os").homedir(), "Downloads");
@@ -221,6 +231,13 @@ class TreeItem extends vscode.TreeItem {
         arguments: [this],
       };
     }
+
+    if (contextValue === "saveTestCases") {
+      this.command = {
+        command: "testCaseView.saveTestCases",
+        title: "Save Test Cases",
+      };
+    }
   }
 }
 
@@ -268,6 +285,14 @@ class TestCaseTreeProvider {
     return testCase;
   }
 
+  createSaveButton() {
+    return new TreeItem(
+      "Save Test Cases",
+      vscode.TreeItemCollapsibleState.None,
+      "saveTestCases"
+    );
+  }
+
   getTestCases() {
     if (!this.currentCppFile) {
       return []; // No active .cpp file
@@ -294,9 +319,11 @@ class TestCaseTreeProvider {
       let tempdata = [];
       tempdata.push(new TreeItem("Add Test Case", null, "addTestCase"));
       tempdata.push(
-        new TreeItem("Run All", null, testCaseData.testCases[0].iodatatypes)
+        new TreeItem("Run All", null, testCaseData.testCases[0].iodatatypes) // bss iska reverse karna baaki hai
       );
-      for (let i = 0; i < testCaseData.testCases.length; i++) {
+      let saveButton = this.createSaveButton();
+      tempdata.push(saveButton);
+      for (let i = 1; i < testCaseData.testCases.length; i++) {
         console.log("Test Case Data: Rendering", testCaseData.testCases[i]);
         console.log(
           "Test Case Data: Rendering",
@@ -308,7 +335,7 @@ class TestCaseTreeProvider {
         );
         tempdata.push(
           this.createTestCase(
-            `TC ${i + 1}`,
+            `TC ${i}`,
             testCaseData.testCases[i].input,
             testCaseData.testCases[i].output,
             testCaseData.testCases[i].iodatatypes
@@ -323,6 +350,55 @@ class TestCaseTreeProvider {
       vscode.window.showErrorMessage("Error reading test case file.");
       return [];
     }
+  }
+
+  saveTestCases() {
+    if (!this.currentCppFile) {
+      vscode.window.showErrorMessage("No active .cpp file to save test cases.");
+      return;
+    }
+
+    const workspaceFolder = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+    if (!workspaceFolder) {
+      vscode.window.showErrorMessage("No workspace folder is open.");
+      return [];
+    }
+
+    const testCasesFolder = path.join(workspaceFolder, "test_cases");
+    const problemName = path.basename(this.currentCppFile, ".cpp");
+    const testCaseFile = path.join(testCasesFolder, `${problemName}.json`);
+    let testCaseDatajson = { testCases: [] };
+    let testCaseData = [];
+    const runAllButton = this.data[1];
+    testCaseData.push({
+      iodatatypes: runAllButton.contextValue, //from runall button
+      input: "a=-1",
+      output: "b=-1",
+    });
+
+    //now iterate over all test cases
+    for (let i = 3; i < this.data.length; i++) {
+      const testCase = this.data[i];
+      const input = testCase.children[0].label.replace("Input: ", "").trim();
+      const output = testCase.children[1].label.replace("Output: ", "").trim();
+      const iodatatypes = testCase.children[2].contextValue;
+      testCaseData.push({
+        iodatatypes: iodatatypes,
+        input: input,
+        output: output,
+      });
+    }
+
+    vscode.window.showInformationMessage("Saving test cases...");
+    testCaseDatajson.testCases = testCaseData;
+
+    fs.writeFileSync(
+      testCaseFile,
+      JSON.stringify(testCaseDatajson, null, 2),
+      "utf-8"
+    );
+    vscode.window.showInformationMessage(`Test cases saved to ${testCaseFile}`);
+    //this.refresh();
   }
 
   // Required method to resolve each tree item
@@ -760,16 +836,23 @@ using namespace std;
 ` + templateCode;
   await fs.writeFileSync(cppFilePath, cppTemplate.trim());
 
-  const testCaseData = {
-    testCases: testCases.map(() => ({
-      iodatatypes: iodatatypes,
-    })),
+  let testCaseData = {
+    testCases: [],
   };
 
-  // Adding the specific test case data
-  testCaseData.testCases.forEach((testCase, index) => {
-    testCase.input = testCases[index].input;
-    testCase.output = testCases[index].output;
+  testCaseData.testCases.push({
+    iodatatypes: iodatatypes,
+    input: "a=-1",
+    output: "b=-1",
+  });
+
+  // Add the actual test cases
+  testCases.forEach((testCase) => {
+    testCaseData.testCases.push({
+      iodatatypes: iodatatypes,
+      input: testCase.input,
+      output: testCase.output,
+    });
   });
 
   // Write the modified data to the file

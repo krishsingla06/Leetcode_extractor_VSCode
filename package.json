@@ -43,6 +43,10 @@
         "title": "Refresh Test Cases via JSON"
       },
       {
+        "command": "testCasesView.saveTestCases",
+        "title": "Save Test Cases"
+      },
+      {
         "command": "testCasesView.itemClicked",
         "title": "Run Test Case"
       },
