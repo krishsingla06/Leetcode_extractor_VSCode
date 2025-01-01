@@ -658,16 +658,6 @@ function parseOutput(outputString, returnType) {
 }
 //-----------For extracting test cases from LeetCode-like HTML content---------------------------------------
 
-function formatJSONString(str) {
-  try {
-    // Attempt to parse and stringify for proper formatting
-    const parsed = JSON.parse(str);
-    return JSON.stringify(parsed, null, 2); // Pretty-print with 2 spaces
-  } catch {
-    return str; // Return as is if not valid JSON
-  }
-}
-
 function extractTestCases(html) {
   console.log("Entered function...");
 
@@ -810,6 +800,8 @@ async function createProblemFiles(
   iodatatypes
 ) {
   problemName = problemName.replace(".html", "");
+  // also remove last (1) type of thing
+  problemName = problemName.replace(/\s*\(.*\)/, "");
   const workspaceFolder = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
   if (!workspaceFolder) {
     vscode.window.showErrorMessage("No workspace folder is open.");
