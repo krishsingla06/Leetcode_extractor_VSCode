@@ -230,3 +230,14 @@ function parseInput(inputString) {
 //   return inputContent;
 // }
 
+
+//----------get cpp code of current file
+// function getCurrentCode(filePath) {
+//   try {
+//     const code = fs.readFileSync(filePath, "utf-8");
+//     return code;
+//   } catch (error) {
+//     console.error("Error reading the current file:", error);
+//     return null;
+//   }
+// }

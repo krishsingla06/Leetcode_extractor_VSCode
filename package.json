@@ -37,6 +37,30 @@
       {
         "command": "testCasesView.refresh",
         "title": "Refresh Test Cases"
+      },
+      {
+        "command": "testCasesView.refreshviajson",
+        "title": "Refresh Test Cases via JSON"
+      },
+      {
+        "command": "testCasesView.itemClicked",
+        "title": "Run Test Case"
+      },
+      {
+        "command": "testCasesView.editText",
+        "title": "Edit Input or Output"
+      },
+      {
+        "command": "testCasesView.runAll",
+        "title": "Run All Test Cases"
+      },
+      {
+        "command": "testCasesView.addTestCase",
+        "title": "Add New Test Case"
+      },
+      {
+        "command": "testCasesView.deleteTestCase",
+        "title": "Delete Test Case"
       }
     ]
   },
