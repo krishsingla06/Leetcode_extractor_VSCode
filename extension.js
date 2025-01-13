@@ -4,6 +4,8 @@ const vscode = require("vscode");
 const fs = require("fs");
 const path = require("path");
 const { DOMParser } = require("@xmldom/xmldom");
+let dummyLine = "// add your code here";
+let selectedLanguage = "cpp";
 
 /**
  * @param {vscode.ExtensionContext} context
@@ -16,7 +18,6 @@ function activate(context) {
     'Congratulations, your extension "leetcode-test-case-extractor" is now active!'
   );
 
-  //console.log(context.extensionPath);
   vscode.window.showInformationMessage(context.extensionPath);
 
   //------Side bar ka UI-UX
@@ -26,7 +27,7 @@ function activate(context) {
 
   // Refresh the tree view when the active editor changes
   vscode.window.onDidChangeActiveTextEditor((editor) => {
-    if (editor && editor.document.fileName.endsWith(".cpp")) {
+    if (editor && editor.document.fileName.endsWith(`${selectedLanguage}`)) {
       testCaseProvider.currentCppFile = editor.document.fileName;
       testCaseProvider.refreshviajson();
     }
@@ -48,7 +49,11 @@ function activate(context) {
   );
 
   // Trigger initial refresh if there's an active cpp file
-  if (vscode.window.activeTextEditor?.document.fileName.endsWith(".cpp")) {
+  if (
+    vscode.window.activeTextEditor?.document.fileName.endsWith(
+      `${selectedLanguage}`
+    )
+  ) {
     testCaseProvider.currentCppFile =
       vscode.window.activeTextEditor.document.fileName;
     testCaseProvider.refreshviajson();
@@ -57,6 +62,7 @@ function activate(context) {
   // Register a command to handle item click
   vscode.commands.registerCommand("testCasesView.itemClicked", (item) => {
     if (item.label === "Run Button") {
+      vscode.window.showInformationMessage("Running test case...");
       const parent = testCaseProvider.findParent(item);
       if (parent) {
         testCaseProvider.runTest(parent);
@@ -134,8 +140,6 @@ function activate(context) {
             const stats = await fs.promises.stat(filePath);
 
             if (stats.isFile()) {
-              console.log(`New HTML file detected: ${filePath}`);
-
               // Read the file asynchronously
               const htmlContent = await fs.promises.readFile(filePath, "utf-8");
               // Extract test cases
@@ -143,9 +147,7 @@ function activate(context) {
               const testCases = testcasesAndBoilerplate.testCases;
               const boilerplate = testcasesAndBoilerplate.boilerplate;
 
-              console.log("Boilerplate:", boilerplate);
               const iodatatypes = parseFunctionSignature(boilerplate);
-              console.log("Function Signature:", iodatatypes);
 
               // Show test cases in the output channel
               const outputChannel =
@@ -264,7 +266,6 @@ class TestCaseTreeProvider {
 
   refreshviajson() {
     let tempdata = this.getTestCases();
-    console.log("Test Case Data: Refreshing", tempdata);
     this.data = tempdata;
     this._onDidChangeTreeData.fire();
   }
@@ -281,6 +282,7 @@ class TestCaseTreeProvider {
       new TreeItem(`Run Button`, null, iodatatypes),
       new TreeItem(`Result: NULL`, null, null),
       new TreeItem(`Delete`, null, "deleteTestCase"),
+      new TreeItem(`Output : `, null, null),
     ]);
     return testCase;
   }
@@ -305,8 +307,11 @@ class TestCaseTreeProvider {
     }
 
     const testCasesFolder = path.join(workspaceFolder, "test_cases");
-    const problemName = path.basename(this.currentCppFile, ".cpp");
-    const testCaseFilePath = path.join(testCasesFolder, `${problemName}.json`);
+    const problemName = path.basename(
+      this.currentCppFile,
+      `${selectedLanguage}`
+    );
+    const testCaseFilePath = path.join(testCasesFolder, `${problemName}json`);
 
     if (!fs.existsSync(testCaseFilePath)) {
       return []; // No test case file for the active .cpp
@@ -315,7 +320,6 @@ class TestCaseTreeProvider {
     try {
       const fileContent = fs.readFileSync(testCaseFilePath, "utf-8");
       const testCaseData = JSON.parse(fileContent);
-      console.log("Test Case Data: ", testCaseData);
       let tempdata = [];
       tempdata.push(new TreeItem("Add Test Case", null, "addTestCase"));
       tempdata.push(
@@ -324,15 +328,6 @@ class TestCaseTreeProvider {
       let saveButton = this.createSaveButton();
       tempdata.push(saveButton);
       for (let i = 1; i < testCaseData.testCases.length; i++) {
-        console.log("Test Case Data: Rendering", testCaseData.testCases[i]);
-        console.log(
-          "Test Case Data: Rendering",
-          testCaseData.testCases[i].input
-        );
-        console.log(
-          "Test Case Data: Rendering",
-          testCaseData.testCases[i].output
-        );
         tempdata.push(
           this.createTestCase(
             `TC ${i}`,
@@ -341,13 +336,11 @@ class TestCaseTreeProvider {
             testCaseData.testCases[i].iodatatypes
           )
         );
-        console.log("Test Case Data: Rendered : ", testCaseData.testCases[i]);
       }
       return tempdata || [];
       //return testCaseData.testCases || [];
     } catch (err) {
-      console.error("Error reading test case file:", err);
-      vscode.window.showErrorMessage("Error reading test case file.");
+      vscode.window.showErrorMessage("Error reading test case file. " + err);
       return [];
     }
   }
@@ -365,7 +358,10 @@ class TestCaseTreeProvider {
     }
 
     const testCasesFolder = path.join(workspaceFolder, "test_cases");
-    const problemName = path.basename(this.currentCppFile, ".cpp");
+    const problemName = path.basename(
+      this.currentCppFile,
+      `${selectedLanguage}`
+    );
     const testCaseFile = path.join(testCasesFolder, `${problemName}.json`);
     let testCaseDatajson = { testCases: [] };
     let testCaseData = [];
@@ -445,33 +441,28 @@ class TestCaseTreeProvider {
   // Method to run a single test case
   async runTest(testCase) {
     const resultChild = testCase.children[3];
+    const outputChild = testCase.children[5];
     const input = testCase.children[0].label.split(":")[1].trim();
     const output = testCase.children[1].label.split(":")[1].trim();
     const iodatatypes = testCase.children[2].contextValue;
     const paramTypes = iodatatypes.paramTypes;
     const returnType = iodatatypes.returnType;
     const funName = iodatatypes.funName;
-    console.log("Pressed Run Button");
-    console.log("Input: ", input);
-    console.log("Output: ", output);
-    console.log("IODatatypes: ", iodatatypes);
-    console.log("paramtypes", paramTypes);
-    console.log("returntypes  ", returnType);
 
     let parsedInputandvariblenames = parseAndFormat(input, paramTypes);
     let parsedInput = parsedInputandvariblenames.formattedCode;
     let variableNames = parsedInputandvariblenames.variables;
+    let parsedinput2 = parseAndFormat2(input);
     let parsedOutput = parseOutput(output, returnType);
-    console.log(`"Parsed Test Cases:",${parsedInput}, ${parsedOutput}`);
-    vscode.window.showInformationMessage(
-      `"Parsed Test Cases:",${parsedInput}, ${parsedOutput}`
-    );
+    let parsedOutput2 = parseOutput2(output);
+
+    // vscode.window.showInformationMessage(
+    //   `"Parsed Test Cases:",${parsedInput}, ${parsedOutput}`
+    // );
     //vscode.window.showInformationMessage(`Running Test Case ${index + 1}`);
-    console.log(`Variable Names:`, variableNames);
     const activeEditor = vscode.window.activeTextEditor;
     if (activeEditor) {
-      const filePath = activeEditor.document.fileName;
-      console.log(`Current file path: ${filePath}`);
+      //const filePath = activeEditor.document.fileName;
 
       // Read the file content (if needed)
       const cppContent = activeEditor.document.getText();
@@ -482,41 +473,40 @@ class TestCaseTreeProvider {
         parsedInput,
         parsedOutput,
         variableNames,
-        funName
+        funName,
+        parsedinput2,
+        parsedOutput2
       );
 
-      if (resultChild) {
-        //const isPass = 0;
-        //let input = testCase.children[0].label.split(":")[1].trim();
-        //let output = testCase.children[1].label.split(":")[1].trim();
-        // console.log("Input: ", input);
-        // console.log("Output: ", output);
-        console.log("Result recieved : ", resp);
+      // Update the result in the tree view
 
-        resultChild.label = "Result : " + resp;
+      let resp2;
+
+      if (resp.includes("error")) {
+        resp2 = "Test Failed";
+      } else {
+        await resp.replace("\n", " ");
+        if (resp.trim() === parsedOutput2.trim()) {
+          resp2 = "Test Passed";
+        } else {
+          resp2 = "Test Failed";
+        }
+      }
+
+      if (resultChild) {
+        resultChild.label = "Result : " + resp2;
+        outputChild.label = "Output : " + resp.trim();
         this.refresh();
       }
     } else {
       vscode.window.showErrorMessage("No active file detected.");
     }
-
-    // if (resultChild) {
-    //   const isPass = 0;
-    //   //let input = testCase.children[0].label.split(":")[1].trim();
-    //   //let output = testCase.children[1].label.split(":")[1].trim();
-    //   // console.log("Input: ", input);
-    //   // console.log("Output: ", output);
-
-    //   resultChild.label = `Result: ${isPass ? "Pass" : "Fail"}`;
-    //   this.refresh();
-    // }
   }
 
   // Method to run all test cases
   async runAllTests() {
     for (const testCase of this.data) {
       if (testCase.children) {
-        console.log("Running test case:", testCase.label);
         await this.runTest(testCase);
       }
     }
@@ -623,12 +613,72 @@ function parseAndFormat(input, paramTypes) {
   }
   result += " ;";
 
-  console.log("returning formattedcode : ", result);
-  console.log("returning Variable Names: ", variableNames);
   return {
     variables: variableNames,
     formattedCode: result,
   };
+}
+
+function parseAndFormat2(input) {
+  // let variableNames = [];
+
+  // const regex = /(\w+)\s*=/g;
+  // let match;
+  // while ((match = regex.exec(input)) !== null) {
+  //   variableNames.push(match[1]);
+  // }
+
+  // Control flags and counters
+  let result = "";
+  //let idx = 0;
+  let canInsertAuto = true;
+  //let canChangeBraces = true;
+  let canChangeComma = true;
+  let arrayDepth = 0;
+  let insideString = false;
+
+  for (let i = 0; i < input.length; i++) {
+    const char = input[i];
+    if (char === '"' || char === "'") {
+      insideString = !insideString;
+      //canChangeBraces = !insideString;
+      canChangeComma = !insideString;
+    }
+
+    if (!insideString) {
+      if (char === "[") {
+        arrayDepth++;
+        if (arrayDepth === 1) {
+          canChangeComma = false;
+        }
+        result += "{";
+        continue;
+      } else if (char === "]") {
+        result += "}";
+        arrayDepth--;
+        if (arrayDepth === 0) {
+          canChangeComma = true;
+        }
+        continue;
+      }
+
+      if (char === "," && canChangeComma && arrayDepth === 0) {
+        result += " ; ";
+        canInsertAuto = true;
+        continue;
+      }
+
+      if (canInsertAuto) {
+        //result += paramTypes[idx] + " ";
+        //idx += 1;
+        canInsertAuto = false;
+      }
+    }
+    result += char;
+  }
+  result += " ;";
+
+  return result;
 }
 
 function parseOutput(outputString, returnType) {
@@ -656,29 +706,50 @@ function parseOutput(outputString, returnType) {
   let outputContent = returnType + "  expected = " + result.trim() + ";";
   return outputContent;
 }
+
+function parseOutput2(outputString) {
+  let result = "";
+  let insideString = false;
+
+  for (let i = 0; i < outputString.length; i++) {
+    const char = outputString[i];
+    if (char === '"' || char === "'") {
+      insideString = !insideString;
+    }
+
+    if (!insideString) {
+      if (
+        char === "[" ||
+        char === "]" ||
+        char === "{" ||
+        char === "}" ||
+        char === "}" ||
+        char === "{" ||
+        char === " "
+      ) {
+        continue;
+      }
+      if (char == ",") {
+        result += " ";
+        continue;
+      }
+      // result += char;
+    }
+    result += char;
+  }
+
+  return result;
+}
 //-----------For extracting test cases from LeetCode-like HTML content---------------------------------------
 
 function extractTestCases(html) {
-  console.log("Entered function...");
-
   const parser = new DOMParser();
   const doc = parser.parseFromString(html, "text/html");
-
-  console.log("Parsed HTML document:");
-  console.log(doc);
 
   const testCases = [];
 
   // Extract test cases
   const strongElements = Array.from(doc.getElementsByTagName("strong"));
-
-  console.log("Found strong elements:");
-  if (strongElements.length === 0) {
-    console.log("No strong elements found.");
-  } else {
-    console.log("Strong elements found:");
-    console.log(strongElements);
-  }
 
   let currentInput = null;
 
@@ -686,30 +757,23 @@ function extractTestCases(html) {
     const strongElement = element;
     const text = strongElement.textContent?.trim();
 
-    console.log("Element Text:", text);
-
     if (text === "Input:") {
       let inputText = strongElement.nextSibling?.textContent?.trim();
-      console.log("Found Input Text:", inputText);
       if (inputText) {
         currentInput = inputText;
       } else {
         const inputSpan =
           strongElement.parentNode?.getElementsByTagName("span")[0];
-        console.log("Input Span:", inputSpan);
         currentInput = inputSpan?.textContent;
       }
     } else if (text === "Output:" && currentInput) {
       let outputText = strongElement.nextSibling?.textContent?.trim();
-      console.log("Found Output Text:", outputText);
       if (outputText) {
         testCases.push({ input: currentInput, output: outputText });
         currentInput = null; // Reset for the next case
       } else {
         const outputSpan =
           strongElement.parentNode?.getElementsByTagName("span")[0];
-
-        console.log("Output Span:", outputSpan);
 
         // Get the text content of the <span>
         outputText = outputSpan?.textContent;
@@ -739,10 +803,6 @@ function extractTestCases(html) {
     }
   });
 
-  if (!boilerplateText) {
-    console.log("Boilerplate container not found.");
-  }
-
   boilerplateText = sanitizeText(boilerplateText);
 
   return { testCases: testCases, boilerplate: boilerplateText };
@@ -760,38 +820,36 @@ function sanitizeText(text) {
   return text;
 }
 
-function saveTestCasesToFile(testCases, filename) {
-  // baad mei use karunga ise
-  const downloadsFolder = path.join(require("os").homedir(), "Downloads");
-  //remove the .html extension
-  filename = filename.replace(".html", "");
-  const outputFile = path.join(
-    downloadsFolder,
-    "test_cases",
-    `${filename}.txt`
-  ); // Ensure file path is correct
-  const dir = path.dirname(outputFile);
-  if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true }); // Create the folder if it doesn't exist
-  }
-  console.log("Output File........:", outputFile);
+// function saveTestCasesToFile(testCases, filename) {
+//   // baad mei use karunga ise
+//   const downloadsFolder = path.join(require("os").homedir(), "Downloads");
+//   //remove the .html extension
+//   filename = filename.replace(".html", "");
+//   const outputFile = path.join(
+//     downloadsFolder,
+//     "test_cases",
+//     `${filename}.txt`
+//   ); // Ensure file path is correct
+//   const dir = path.dirname(outputFile);
+//   if (!fs.existsSync(dir)) {
+//     fs.mkdirSync(dir, { recursive: true }); // Create the folder if it doesn't exist
+//   }
 
-  let content = "";
-  testCases.forEach((testCase, index) => {
-    content += `Test Case ${index + 1}:\n`;
-    content += `  Input: ${testCase.input}\n`;
-    content += `  Output: ${testCase.output}\n\n`;
-  });
+//   let content = "";
+//   testCases.forEach((testCase, index) => {
+//     content += `Test Case ${index + 1}:\n`;
+//     content += `  Input: ${testCase.input}\n`;
+//     content += `  Output: ${testCase.output}\n\n`;
+//   });
 
-  try {
-    // Write to the file synchronously
-    fs.writeFileSync(outputFile, content, "utf-8");
-    vscode.window.showInformationMessage("Test cases saved to test_cases.txt.");
-  } catch (err) {
-    console.error("Error saving test cases to file:", err);
-    vscode.window.showErrorMessage("Error saving test cases to file.");
-  }
-}
+//   try {
+//     // Write to the file synchronously
+//     fs.writeFileSync(outputFile, content, "utf-8");
+//     vscode.window.showInformationMessage("Test cases saved to test_cases.txt.");
+//   } catch (err) {
+//     vscode.window.showErrorMessage("Error saving test cases to file. " + err);
+//   }
+// }
 
 async function createProblemFiles(
   problemName,
@@ -855,7 +913,7 @@ using namespace std;
 
   // Open .cpp file in editor
   vscode.workspace.openTextDocument(cppFilePath).then((doc) => {
-    vscode.window.vscode.window.showTextDocument(doc);
+    vscode.window.showTextDocument(doc);
   });
 }
 
@@ -866,64 +924,72 @@ async function updateCppFile(
   parsedInput,
   parsedOutput,
   inputVariables,
-  funName
+  funName,
+  parsedinput2
 ) {
   // Path to your C++ file
   const cppFilePath = "./bgrunner.cpp";
 
   // Read the current content of the C++ file
-  let cppContentwithoutcurrentcode = fs.readFileSync(cppFilePath, "utf8");
-  let cppContent = `${currentcode}\n${cppContentwithoutcurrentcode}`;
+  //let cppContentwithoutcurrentcode = fs.readFileSync(cppFilePath, "utf8");
+  // let cppContent = `${currentcode}\n${cppContentwithoutcurrentcode}`;
+  let cppContent = currentcode;
 
   // Extract where the code will be inserted after the line `// add your code here`
-  const insertIndex = cppContent.indexOf("// add your code here");
+  const insertIndex = cppContent.indexOf(dummyLine);
 
   if (insertIndex === -1) {
-    console.log("Couldn't find the comment line in bgrunner.cpp");
+    //also show error message
+    fs.writeFileSync(cppFilePath, cppContent);
+    vscode.window.showErrorMessage(
+      `Couldn't find the comment line in bgrunner.cpp. Please add the comment line ${dummyLine} in the file.`
+    );
     return;
   }
 
   // Prepare the code to insert
-  const inputString = parsedInput; // Example of parsed input
-  const outputString = parsedOutput; // Example of parsed output
+  const inputString = parsedinput2; // Example of parsed input
+  //const outputString = parsedOutput; // Example of parsed output
   // const funCall = `fun(${inputVariables.join(", ")});`;
-  const nxtline = `if (expected == krish.${funName}(${inputVariables.join(
-    ", "
-  )}))`;
+  // const nxtline = `if (expected == krish.${funName}(${inputVariables.join(
+  //   ", "
+  // )}))`;
   //if (expectedoutput == fun(nums, val))
 
   // Insert the parsed input and output and the function call
+  // cppContent =
+  //   cppContent.slice(0, insertIndex + dummyLine.length) +
+  //   "\n" +
+  //   inputString +
+  //   "\n" +
+  //   outputString +
+  //   "\n" +
+  //   "Solution krish;\n" +
+  //   nxtline +
+  //   cppContent.slice(insertIndex + dummyLine.length);
   cppContent =
-    cppContent.slice(0, insertIndex + "// add your code here".length) +
+    cppContent.slice(0, insertIndex + dummyLine.length) +
     "\n" +
     inputString +
     "\n" +
-    outputString +
-    "\n" +
-    "Solution krish;\n" +
-    nxtline +
-    cppContent.slice(insertIndex + "// add your code here".length);
+    // outputString +
+    // "\n" +
+    // "Solution krish;\n" +
+    // nxtline +
+    cppContent.slice(insertIndex + dummyLine.length);
 
   // Write the updated content back to the C++ file
   fs.writeFileSync(cppFilePath, cppContent);
-
-  console.log(
-    "Updated bgrunner.cpp with parsed input, output, and function call"
-  );
 }
 
 async function compileAndRunCpp() {
-  console.log("Entered Compile and Run function");
-
   // Compile the C++ file
   const compile = () => {
     return new Promise((resolve, reject) => {
       exec("g++ bgrunner.cpp -o kkk.exe", (err, stdout, stderr) => {
         if (err) {
-          console.error(`Error compiling: ${stderr}`);
           reject(stderr);
         } else {
-          console.log("C++ code compiled successfully!");
           resolve(stdout);
         }
       });
@@ -935,10 +1001,8 @@ async function compileAndRunCpp() {
     return new Promise((resolve, reject) => {
       exec("kkk.exe", (err, stdout, stderr) => {
         if (err) {
-          console.error(`Error running C++ code: ${stderr}`);
           reject(stderr);
         } else {
-          console.log(`C++ Output: ${stdout}`);
           resolve(stdout);
         }
       });
@@ -950,8 +1014,8 @@ async function compileAndRunCpp() {
     const result = await run(); // Wait for the program to execute
     return result; // Return the program's output
   } catch (error) {
-    console.error("Error during compile and run:", error);
-    throw error; // Rethrow the error for the caller to handle
+    return `error + ${error}`;
+    //throw error; // Rethrow the error for the caller to handle
   }
 }
 
@@ -963,8 +1027,6 @@ async function restoreOriginalCpp() {
 
   // Write the original content back to bgrunner.cpp
   fs.writeFileSync("./bgrunner.cpp", permanentCpp);
-
-  console.log("Restored bgrunner.cpp to its original state.");
 }
 
 async function testerfun(
@@ -972,28 +1034,20 @@ async function testerfun(
   parsedInput,
   parsedOutput,
   inputVariables,
-  funName
+  funName,
+  parsedinput2
 ) {
-  console.log("Kuch nhi kiya");
-  console.log("Restoring stated");
-  await restoreOriginalCpp();
-  console.log("restoring ended");
-  console.log("updating started");
   await updateCppFile(
     currentcode,
     parsedInput,
     parsedOutput,
     inputVariables,
-    funName
+    funName,
+    parsedinput2
   );
-  console.log("updating end");
-  console.log("compile and run start");
+
   let resp = await compileAndRunCpp();
-  console.log("compiled -- ", resp);
   return resp;
-  // setTimeout(() => {
-  //   restoreOriginalCpp();
-  // }, 500);
 }
 
 //------------------Function Signature Parser-------------------
