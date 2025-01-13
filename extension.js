@@ -4,8 +4,7 @@ const vscode = require("vscode");
 const fs = require("fs");
 const path = require("path");
 const { DOMParser } = require("@xmldom/xmldom");
-let dummyLine = "// add your code here";
-let selectedLanguage = "cpp";
+let allowedLanguages = ["cpp", "py"];
 
 /**
  * @param {vscode.ExtensionContext} context
@@ -20,20 +19,27 @@ function activate(context) {
 
   vscode.window.showInformationMessage(context.extensionPath);
 
-  //------Side bar ka UI-UX
-
   const testCaseProvider = new TestCaseTreeProvider();
   vscode.window.registerTreeDataProvider("testCasesView", testCaseProvider);
 
   // Refresh the tree view when the active editor changes
   vscode.window.onDidChangeActiveTextEditor((editor) => {
-    if (editor && editor.document.fileName.endsWith(`${selectedLanguage}`)) {
-      testCaseProvider.currentCppFile = editor.document.fileName;
-      testCaseProvider.refreshviajson();
+    if (editor) {
+      if (
+        allowedLanguages.includes(editor.document.fileName.split(".").pop())
+      ) {
+        testCaseProvider.currentCppFile = editor.document.fileName;
+        testCaseProvider.refreshviajson();
+      } else {
+        testCaseProvider.currentCppFile = null;
+        testCaseProvider.data = [
+          new TreeItem(`Extension allows languages: ${allowedLanguages}`),
+        ];
+        testCaseProvider.refresh();
+      }
     }
   });
 
-  // Add a command to refresh manually
   context.subscriptions.push(
     vscode.commands.registerCommand("testCasesView.refresh", () => {
       testCaseProvider.refresh();
@@ -49,14 +55,22 @@ function activate(context) {
   );
 
   // Trigger initial refresh if there's an active cpp file
-  if (
-    vscode.window.activeTextEditor?.document.fileName.endsWith(
-      `${selectedLanguage}`
-    )
-  ) {
-    testCaseProvider.currentCppFile =
-      vscode.window.activeTextEditor.document.fileName;
-    testCaseProvider.refreshviajson();
+  if (vscode.window.activeTextEditor) {
+    if (
+      allowedLanguages.includes(
+        vscode.window.activeTextEditor.document.fileName.split(".").pop()
+      )
+    ) {
+      testCaseProvider.currentCppFile =
+        vscode.window.activeTextEditor.document.fileName;
+      testCaseProvider.refreshviajson();
+    } else {
+      testCaseProvider.currentCppFile = null;
+      testCaseProvider.data = [
+        new TreeItem(`Extension allows languages: ${allowedLanguages}`),
+      ];
+      testCaseProvider.refresh();
+    }
   }
 
   // Register a command to handle item click
@@ -124,7 +138,6 @@ function activate(context) {
 
   //------Code to watch whether new HTML file is downloaded or not, if yes, fetch its IO and generate boilerplate (Leetcode template fetching pending)------------------------------------------------
   const downloadsFolder = path.join(require("os").homedir(), "Downloads");
-  // Watch the downloads folder for changes to HTML files
   let debounceTimer;
   fs.watch(
     downloadsFolder,
@@ -146,9 +159,6 @@ function activate(context) {
               const testcasesAndBoilerplate = extractTestCases(htmlContent);
               const testCases = testcasesAndBoilerplate.testCases;
               const boilerplate = testcasesAndBoilerplate.boilerplate;
-
-              //const iodatatypes = parseFunctionSignature(boilerplate);
-
               // Show test cases in the output channel
               const outputChannel =
                 vscode.window.createOutputChannel("Test Cases");
@@ -158,8 +168,34 @@ function activate(context) {
                 outputChannel.appendLine(`  Input: ${testCase.input}`);
                 outputChannel.appendLine(`  Output: ${testCase.output}`);
               });
-              //saveTestCasesToFile(testCases, filename); just saving it to downloads folder , nothing else
-              createProblemFiles(filename, boilerplate, testCases);
+              //ask for language
+              let problemName = filename.replace(".html", "");
+              // also remove last (1) type of thing
+              problemName = filename.replace(/\s*\(.*\)/, "");
+
+              const selectedLanguage = await vscode.window.showQuickPick(
+                ["cpp", "py"], // Options
+                {
+                  placeHolder: `Select the language for problem ${problemName}`, // Placeholder text
+                  canPickMany: false, // Ensure only one option can be selected
+                  ignoreFocusOut: true, // Keep the picker open when focus is lost
+                }
+              );
+
+              if (selectedLanguage === undefined) {
+                vscode.window.showErrorMessage(
+                  "No language selected. Please try again."
+                );
+                return;
+              }
+              let initialLanguage = selectedLanguage;
+
+              createProblemFiles(
+                filename,
+                boilerplate,
+                testCases,
+                initialLanguage
+              );
             }
           } catch (err) {
             console.error("Error accessing file:", err);
@@ -168,7 +204,6 @@ function activate(context) {
       }
     }
   );
-  //-------End
 }
 
 function deactivate() {}
@@ -247,7 +282,6 @@ class TestCaseTreeProvider {
   constructor() {
     this._onDidChangeTreeData = new vscode.EventEmitter();
     this.onDidChangeTreeData = this._onDidChangeTreeData.event;
-    //this.data is empty map of TreeItem
     const resourcesPath = path.join(__dirname, "resources");
 
     this.icons = {
@@ -278,7 +312,6 @@ class TestCaseTreeProvider {
     const testCase = new TreeItem(label, [
       new TreeItem(`Input: ${input}`, null, "editable"),
       new TreeItem(`Output: ${output}`, null, "editable"),
-      //new TreeItem("Data Types: " + iodatatypes),
       new TreeItem(`Run Button`, null, null),
       new TreeItem(`Result: NULL`, null, null),
       new TreeItem(`Delete`, null, "deleteTestCase"),
@@ -306,6 +339,9 @@ class TestCaseTreeProvider {
       return [];
     }
 
+    // extension of current opened file
+    let selectedLanguage = this.currentCppFile.split(".").pop();
+
     const testCasesFolder = path.join(workspaceFolder, "test_cases");
     const problemName = path.basename(
       this.currentCppFile,
@@ -329,7 +365,7 @@ class TestCaseTreeProvider {
       );
       let saveButton = this.createSaveButton();
       tempdata.push(saveButton);
-      for (let i = 1; i < testCaseData.testCases.length; i++) {
+      for (let i = 0; i < testCaseData.testCases.length; i++) {
         tempdata.push(
           this.createTestCase(
             `TC ${i}`,
@@ -349,7 +385,7 @@ class TestCaseTreeProvider {
 
   saveTestCases() {
     if (!this.currentCppFile) {
-      vscode.window.showErrorMessage("No active .cpp file to save test cases.");
+      vscode.window.showErrorMessage(`No active file to save test cases.`);
       return;
     }
 
@@ -360,6 +396,7 @@ class TestCaseTreeProvider {
     }
 
     const testCasesFolder = path.join(workspaceFolder, "test_cases");
+    let selectedLanguage = this.currentCppFile.split(".").pop();
     const problemName = path.basename(
       this.currentCppFile,
       `${selectedLanguage}`
@@ -367,11 +404,6 @@ class TestCaseTreeProvider {
     const testCaseFile = path.join(testCasesFolder, `${problemName}json`);
     let testCaseDatajson = { testCases: [] };
     let testCaseData = [];
-
-    testCaseData.push({
-      input: "a=-1",
-      output: "b=-1",
-    });
 
     //now iterate over all test cases
     for (let i = 3; i < this.data.length; i++) {
@@ -442,26 +474,14 @@ class TestCaseTreeProvider {
     const outputChild = testCase.children[5];
     const input = testCase.children[0].label.split(":")[1].trim();
     const output = testCase.children[1].label.split(":")[1].trim();
-    // const iodatatypes = testCase.children[2].contextValue;
-    // const paramTypes = iodatatypes.paramTypes;
-    // const returnType = iodatatypes.returnType;
-    //const funName = iodatatypes.funName;
 
-    //let parsedInputandvariblenames = parseAndFormat(input, paramTypes);
-    //let parsedInput = parsedInputandvariblenames.formattedCode;
-    //let variableNames = parsedInputandvariblenames.variables;
-    let parsedinput2 = parseAndFormat2(input);
-    //let parsedOutput = parseOutput(output, returnType);
-    let parsedOutput2 = parseOutput2(output);
-
-    // vscode.window.showInformationMessage(
-    //   `"Parsed Test Cases:",${parsedInput}, ${parsedOutput}`
-    // );
-    //vscode.window.showInformationMessage(`Running Test Case ${index + 1}`);
     const activeEditor = vscode.window.activeTextEditor;
     if (activeEditor) {
       const cppContent = activeEditor.document.getText();
-      let resp = await testerfun(cppContent, parsedinput2);
+      const selectedLanguage = activeEditor.document.fileName.split(".").pop();
+      let parsedinput2 = await parseAndFormat2(input, selectedLanguage);
+      let parsedOutput2 = await parseOutput2(output);
+      let resp = await testerfun(cppContent, parsedinput2, selectedLanguage);
 
       let resp2;
 
@@ -469,6 +489,14 @@ class TestCaseTreeProvider {
         resp2 = "Test Failed";
       } else {
         await resp.replace("\n", " ");
+        await resp.replace("\r", " ");
+        await resp.replace("\t", " ");
+        await resp.replace("\v", " ");
+        //replace new lines endlines and tabs
+
+        console.log("resp : " + resp);
+        console.log("parsedOutput2 : " + parsedOutput2);
+
         if (resp.trim() === parsedOutput2.trim()) {
           resp2 = "Test Passed";
         } else {
@@ -537,85 +565,9 @@ class TestCaseTreeProvider {
 
 //----------------------Parser----------------------------------
 
-// function parseAndFormat(input, paramTypes) {
-//   let variableNames = [];
-
-//   const regex = /(\w+)\s*=/g;
-//   let match;
-//   while ((match = regex.exec(input)) !== null) {
-//     variableNames.push(match[1]);
-//   }
-
-//   // Control flags and counters
-//   let result = "";
-//   let idx = 0;
-//   let canInsertAuto = true;
-//   //let canChangeBraces = true;
-//   let canChangeComma = true;
-//   let arrayDepth = 0;
-//   let insideString = false;
-
-//   for (let i = 0; i < input.length; i++) {
-//     const char = input[i];
-//     if (char === '"' || char === "'") {
-//       insideString = !insideString;
-//       //canChangeBraces = !insideString;
-//       canChangeComma = !insideString;
-//     }
-
-//     if (!insideString) {
-//       if (char === "[") {
-//         arrayDepth++;
-//         if (arrayDepth === 1) {
-//           canChangeComma = false;
-//         }
-//         result += "{";
-//         continue;
-//       } else if (char === "]") {
-//         result += "}";
-//         arrayDepth--;
-//         if (arrayDepth === 0) {
-//           canChangeComma = true;
-//         }
-//         continue;
-//       }
-
-//       if (char === "," && canChangeComma && arrayDepth === 0) {
-//         result += " ; ";
-//         canInsertAuto = true;
-//         continue;
-//       }
-
-//       if (canInsertAuto) {
-//         result += paramTypes[idx] + " ";
-//         idx += 1;
-//         canInsertAuto = false;
-//       }
-//     }
-//     result += char;
-//   }
-//   result += " ;";
-
-//   return {
-//     variables: variableNames,
-//     formattedCode: result,
-//   };
-// }
-
-function parseAndFormat2(input) {
-  // let variableNames = [];
-
-  // const regex = /(\w+)\s*=/g;
-  // let match;
-  // while ((match = regex.exec(input)) !== null) {
-  //   variableNames.push(match[1]);
-  // }
-
-  // Control flags and counters
+function parseAndFormat2(input, selectedLanguage) {
   let result = "";
-  //let idx = 0;
   let canInsertAuto = true;
-  //let canChangeBraces = true;
   let canChangeComma = true;
   let arrayDepth = 0;
   let insideString = false;
@@ -624,7 +576,6 @@ function parseAndFormat2(input) {
     const char = input[i];
     if (char === '"' || char === "'") {
       insideString = !insideString;
-      //canChangeBraces = !insideString;
       canChangeComma = !insideString;
     }
 
@@ -634,10 +585,11 @@ function parseAndFormat2(input) {
         if (arrayDepth === 1) {
           canChangeComma = false;
         }
-        result += "{";
+        result += selectedLanguage === "py" ? "[" : "{";
         continue;
       } else if (char === "]") {
-        result += "}";
+        //result += "}";
+        result += selectedLanguage === "py" ? "]" : "}";
         arrayDepth--;
         if (arrayDepth === 0) {
           canChangeComma = true;
@@ -652,43 +604,14 @@ function parseAndFormat2(input) {
       }
 
       if (canInsertAuto) {
-        //result += paramTypes[idx] + " ";
-        //idx += 1;
         canInsertAuto = false;
       }
     }
     result += char;
   }
   result += " ;";
-
   return result;
 }
-
-// function parseOutput(outputString, returnType) {
-//   let result = "";
-//   let insideString = false;
-
-//   for (let i = 0; i < outputString.length; i++) {
-//     const char = outputString[i];
-//     if (char === '"' || char === "'") {
-//       insideString = !insideString;
-//     }
-
-//     if (!insideString) {
-//       if (char === "[") {
-//         result += "{";
-//         continue;
-//       } else if (char === "]") {
-//         result += "}";
-//         continue;
-//       }
-//     }
-//     result += char;
-//   }
-
-//   let outputContent = returnType + "  expected = " + result.trim() + ";";
-//   return outputContent;
-// }
 
 function parseOutput2(outputString) {
   let result = "";
@@ -708,7 +631,9 @@ function parseOutput2(outputString) {
         char === "}" ||
         char === "}" ||
         char === "{" ||
-        char === " "
+        char === " " ||
+        char === "'" ||
+        char === '"'
       ) {
         continue;
       }
@@ -716,7 +641,6 @@ function parseOutput2(outputString) {
         result += " ";
         continue;
       }
-      // result += char;
     }
     result += char;
   }
@@ -731,7 +655,6 @@ function extractTestCases(html) {
 
   const testCases = [];
 
-  // Extract test cases
   const strongElements = Array.from(doc.getElementsByTagName("strong"));
 
   let currentInput = null;
@@ -758,7 +681,6 @@ function extractTestCases(html) {
         const outputSpan =
           strongElement.parentNode?.getElementsByTagName("span")[0];
 
-        // Get the text content of the <span>
         outputText = outputSpan?.textContent;
         if (outputText) {
           currentInput = sanitizeText(currentInput);
@@ -770,7 +692,6 @@ function extractTestCases(html) {
     }
   });
 
-  // Locate elements with class "view-lines monaco-mouse-cursor-text"
   const elements = Array.from(doc.getElementsByTagName("div"));
 
   let boilerplateText = "";
@@ -779,7 +700,6 @@ function extractTestCases(html) {
     if (
       element.getAttribute("class") === "view-lines monaco-mouse-cursor-text"
     ) {
-      // Extract text content from child nodes
       boilerplateText = Array.from(element.childNodes)
         .map((node) => node.textContent)
         .join("\n");
@@ -803,38 +723,13 @@ function sanitizeText(text) {
   return text;
 }
 
-// function saveTestCasesToFile(testCases, filename) {
-//   // baad mei use karunga ise
-//   const downloadsFolder = path.join(require("os").homedir(), "Downloads");
-//   //remove the .html extension
-//   filename = filename.replace(".html", "");
-//   const outputFile = path.join(
-//     downloadsFolder,
-//     "test_cases",
-//     `${filename}.txt`
-//   ); // Ensure file path is correct
-//   const dir = path.dirname(outputFile);
-//   if (!fs.existsSync(dir)) {
-//     fs.mkdirSync(dir, { recursive: true }); // Create the folder if it doesn't exist
-//   }
-
-//   let content = "";
-//   testCases.forEach((testCase, index) => {
-//     content += `Test Case ${index + 1}:\n`;
-//     content += `  Input: ${testCase.input}\n`;
-//     content += `  Output: ${testCase.output}\n\n`;
-//   });
-
-//   try {
-//     // Write to the file synchronously
-//     fs.writeFileSync(outputFile, content, "utf-8");
-//     vscode.window.showInformationMessage("Test cases saved to test_cases.txt.");
-//   } catch (err) {
-//     vscode.window.showErrorMessage("Error saving test cases to file. " + err);
-//   }
-// }
-
-async function createProblemFiles(problemName, templateCode, testCases) {
+async function createProblemFiles(
+  problemName,
+  templateCode,
+  testCases,
+  initialLanguage = "cpp"
+) {
+  let selectedLanguage = initialLanguage;
   problemName = problemName.replace(".html", "");
   // also remove last (1) type of thing
   problemName = problemName.replace(/\s*\(.*\)/, "");
@@ -845,7 +740,10 @@ async function createProblemFiles(problemName, templateCode, testCases) {
   }
 
   // File paths
-  const cppFilePath = path.join(workspaceFolder, `${problemName}.cpp`);
+  const cppFilePath = path.join(
+    workspaceFolder,
+    `${problemName}.${selectedLanguage}`
+  );
   const testCaseFolder = path.join(workspaceFolder, "test_cases");
   const testCaseFilePath = path.join(testCaseFolder, `${problemName}.json`);
 
@@ -855,23 +753,31 @@ async function createProblemFiles(problemName, templateCode, testCases) {
   }
 
   // Create .cpp file
-  const cppTemplate =
-    `
-#include <bits/stdc++.h>
-using namespace std;
 
-//You can't change class name and funtion name\n
-` + templateCode;
-  await fs.writeFileSync(cppFilePath, cppTemplate.trim());
+  let extratemp =
+    selectedLanguage === "cpp"
+      ? `
+  #include <bits/stdc++.h>
+  using namespace std;
+  
+  //You can't change class name and funtion name\n
+  `
+      : "";
+  const cppTemplate = extratemp + templateCode;
+  //if file already exists, then don't overwrite it
+
+  if (fs.existsSync(cppFilePath)) {
+    vscode.window.showErrorMessage(
+      `File ${cppFilePath} already exists. Please delete it and try again.`
+    );
+    return;
+  } else {
+    await fs.writeFileSync(cppFilePath, cppTemplate.trim());
+  }
 
   let testCaseData = {
     testCases: [],
   };
-
-  testCaseData.testCases.push({
-    input: "a=-1",
-    output: "b=-1",
-  });
 
   // Add the actual test cases
   testCases.forEach((testCase) => {
@@ -895,26 +801,30 @@ using namespace std;
 
 //---------------------------------------------Compile and run------------------------------------------------
 // Function to write the parsed content to bgrunner.cpp
-async function updateCppFile(currentcode, parsedinput2) {
-  // Path to your C++ file
-  const cppFilePath = "./bgrunner.cpp";
+async function updateCppFile(currentcode, parsedinput2, selectedLanguage) {
+  const cppFilePath = `./bgrunner.${selectedLanguage}`;
+
+  let dummyLine = "// krish";
+
+  if (selectedLanguage === "py") {
+    dummyLine = "# krish";
+  }
 
   let cppContent = currentcode;
 
   const insertIndex = cppContent.indexOf(dummyLine);
 
   if (insertIndex === -1) {
-    //also show error message
     fs.writeFileSync(cppFilePath, cppContent);
     vscode.window.showErrorMessage(
-      `Couldn't find the comment line in bgrunner.cpp. Please add the comment line ${dummyLine} in the file.`
+      `Couldn't find the comment line in bgrunner.${selectedLanguage}. Please add the comment line ${dummyLine} in the file.`
     );
     return;
   }
 
   const inputString = parsedinput2;
   cppContent =
-    cppContent.slice(0, insertIndex + dummyLine.length) +
+    cppContent.slice(0, insertIndex) +
     "\n" +
     inputString +
     "\n" +
@@ -922,28 +832,48 @@ async function updateCppFile(currentcode, parsedinput2) {
   fs.writeFileSync(cppFilePath, cppContent);
 }
 
-async function compileAndRunCpp() {
+async function compileAndRunCpp(selectedLanguage) {
   const compile = () => {
     return new Promise((resolve, reject) => {
-      exec("g++ bgrunner.cpp -o kkk.exe", (err, stdout, stderr) => {
-        if (err) {
-          reject(stderr);
-        } else {
-          resolve(stdout);
-        }
-      });
+      if (selectedLanguage === "py") {
+        resolve("Python does not require compilation.");
+      } else if (selectedLanguage == "cpp") {
+        let execstring = "g++ bgrunner.cpp -o kkk.exe";
+        exec(execstring, (err, stdout, stderr) => {
+          if (err) {
+            reject(stderr);
+          } else {
+            resolve(stdout);
+          }
+        });
+      } else {
+        reject("Unsupported language.");
+      }
     });
   };
 
   const run = () => {
     return new Promise((resolve, reject) => {
-      exec("kkk.exe", (err, stdout, stderr) => {
-        if (err) {
-          reject(stderr);
-        } else {
-          resolve(stdout);
-        }
-      });
+      if (selectedLanguage == "cpp") {
+        exec("kkk.exe", (err, stdout, stderr) => {
+          if (err) {
+            reject(stderr);
+          } else {
+            resolve(stdout);
+          }
+        });
+      } else if (selectedLanguage == "py") {
+        const execstring = "python bgrunner.py";
+        exec(execstring, (err, stdout, stderr) => {
+          if (err) {
+            reject(`Execution error: ${stderr}`);
+          } else {
+            resolve(stdout);
+          }
+        });
+      } else {
+        reject("Unsupported language.");
+      }
     });
   };
 
@@ -952,50 +882,13 @@ async function compileAndRunCpp() {
     const result = await run(); // Wait for the program to execute
     return result; // Return the program's output
   } catch (error) {
-    return `error + ${error}`;
-    //throw error; // Rethrow the error for the caller to handle
+    return `error : ${error}`;
   }
 }
 
-async function testerfun(currentcode, parsedinput2) {
-  await updateCppFile(currentcode, parsedinput2);
+async function testerfun(currentcode, parsedinput2, selectedLanguage = "cpp") {
+  await updateCppFile(currentcode, parsedinput2, selectedLanguage);
 
-  let resp = await compileAndRunCpp();
+  let resp = await compileAndRunCpp(selectedLanguage);
   return resp;
 }
-
-//------------------Function Signature Parser-------------------
-
-// function parseFunctionSignature(functionSignature) {
-//   // Regex to extract the return type and parameter types
-//   const regex = /([a-zA-Z0-9<>&\[\]]+)\s+([a-zA-Z0-9_]+)\s*\((.*)\)/;
-
-//   // Match the function signature using regex
-//   const match = functionSignature.match(regex);
-
-//   if (!match) {
-//     console.error("Invalid function signature");
-//     return;
-//   }
-
-//   // Extract return type and parameters
-//   const returnTypewithampercent = match[1]; // The return type is the first capture group
-//   const funName = match[2]; // The function name is in the second capture group
-//   const paramsStringwithampercent = match[3]; // The parameter types are in the third capture group
-//   const returnType = returnTypewithampercent.replace("&", ""); // Remove the & symbol
-//   const paramsString = paramsStringwithampercent.replace("&", ""); // Remove the & symbol
-//   console.log("paramsString:", paramsString);
-//   // Now, extract the parameter data types
-//   const paramTypes = paramsString.split(",").map((param) => {
-//     // Clean up spaces and extract only the data type part
-//     const dataType = param.trim().split(" ")[0];
-//     return dataType;
-//   });
-
-//   // Return the result as an object
-//   return {
-//     returnType,
-//     paramTypes,
-//     funName,
-//   };
-// }
