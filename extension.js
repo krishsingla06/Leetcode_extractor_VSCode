@@ -147,7 +147,7 @@ function activate(context) {
               const testCases = testcasesAndBoilerplate.testCases;
               const boilerplate = testcasesAndBoilerplate.boilerplate;
 
-              const iodatatypes = parseFunctionSignature(boilerplate);
+              //const iodatatypes = parseFunctionSignature(boilerplate);
 
               // Show test cases in the output channel
               const outputChannel =
@@ -159,7 +159,7 @@ function activate(context) {
                 outputChannel.appendLine(`  Output: ${testCase.output}`);
               });
               //saveTestCasesToFile(testCases, filename); just saving it to downloads folder , nothing else
-              createProblemFiles(filename, boilerplate, testCases, iodatatypes);
+              createProblemFiles(filename, boilerplate, testCases);
             }
           } catch (err) {
             console.error("Error accessing file:", err);
@@ -274,12 +274,12 @@ class TestCaseTreeProvider {
     this._onDidChangeTreeData.fire();
   }
 
-  createTestCase(label, input, output, iodatatypes) {
+  createTestCase(label, input, output) {
     const testCase = new TreeItem(label, [
       new TreeItem(`Input: ${input}`, null, "editable"),
       new TreeItem(`Output: ${output}`, null, "editable"),
       //new TreeItem("Data Types: " + iodatatypes),
-      new TreeItem(`Run Button`, null, iodatatypes),
+      new TreeItem(`Run Button`, null, null),
       new TreeItem(`Result: NULL`, null, null),
       new TreeItem(`Delete`, null, "deleteTestCase"),
       new TreeItem(`Output : `, null, null),
@@ -314,7 +314,9 @@ class TestCaseTreeProvider {
     const testCaseFilePath = path.join(testCasesFolder, `${problemName}json`);
 
     if (!fs.existsSync(testCaseFilePath)) {
-      return []; // No test case file for the active .cpp
+      //make folder and .json file
+      fs.writeFileSync(testCaseFilePath, JSON.stringify({ testCases: [] }));
+      //return []; // No test case file for the active .cpp
     }
 
     try {
@@ -323,7 +325,7 @@ class TestCaseTreeProvider {
       let tempdata = [];
       tempdata.push(new TreeItem("Add Test Case", null, "addTestCase"));
       tempdata.push(
-        new TreeItem("Run All", null, testCaseData.testCases[0].iodatatypes) // bss iska reverse karna baaki hai
+        new TreeItem("Run All", null, null) // bss iska reverse karna baaki hai
       );
       let saveButton = this.createSaveButton();
       tempdata.push(saveButton);
@@ -332,8 +334,8 @@ class TestCaseTreeProvider {
           this.createTestCase(
             `TC ${i}`,
             testCaseData.testCases[i].input,
-            testCaseData.testCases[i].output,
-            testCaseData.testCases[i].iodatatypes
+            testCaseData.testCases[i].output
+            //testCaseData.testCases[i].iodatatypes
           )
         );
       }
@@ -362,12 +364,11 @@ class TestCaseTreeProvider {
       this.currentCppFile,
       `${selectedLanguage}`
     );
-    const testCaseFile = path.join(testCasesFolder, `${problemName}.json`);
+    const testCaseFile = path.join(testCasesFolder, `${problemName}json`);
     let testCaseDatajson = { testCases: [] };
     let testCaseData = [];
-    const runAllButton = this.data[1];
+
     testCaseData.push({
-      iodatatypes: runAllButton.contextValue, //from runall button
       input: "a=-1",
       output: "b=-1",
     });
@@ -377,9 +378,7 @@ class TestCaseTreeProvider {
       const testCase = this.data[i];
       const input = testCase.children[0].label.replace("Input: ", "").trim();
       const output = testCase.children[1].label.replace("Output: ", "").trim();
-      const iodatatypes = testCase.children[2].contextValue;
       testCaseData.push({
-        iodatatypes: iodatatypes,
         input: input,
         output: output,
       });
@@ -394,7 +393,6 @@ class TestCaseTreeProvider {
       "utf-8"
     );
     vscode.window.showInformationMessage(`Test cases saved to ${testCaseFile}`);
-    //this.refresh();
   }
 
   // Required method to resolve each tree item
@@ -444,16 +442,16 @@ class TestCaseTreeProvider {
     const outputChild = testCase.children[5];
     const input = testCase.children[0].label.split(":")[1].trim();
     const output = testCase.children[1].label.split(":")[1].trim();
-    const iodatatypes = testCase.children[2].contextValue;
-    const paramTypes = iodatatypes.paramTypes;
-    const returnType = iodatatypes.returnType;
-    const funName = iodatatypes.funName;
+    // const iodatatypes = testCase.children[2].contextValue;
+    // const paramTypes = iodatatypes.paramTypes;
+    // const returnType = iodatatypes.returnType;
+    //const funName = iodatatypes.funName;
 
-    let parsedInputandvariblenames = parseAndFormat(input, paramTypes);
-    let parsedInput = parsedInputandvariblenames.formattedCode;
-    let variableNames = parsedInputandvariblenames.variables;
+    //let parsedInputandvariblenames = parseAndFormat(input, paramTypes);
+    //let parsedInput = parsedInputandvariblenames.formattedCode;
+    //let variableNames = parsedInputandvariblenames.variables;
     let parsedinput2 = parseAndFormat2(input);
-    let parsedOutput = parseOutput(output, returnType);
+    //let parsedOutput = parseOutput(output, returnType);
     let parsedOutput2 = parseOutput2(output);
 
     // vscode.window.showInformationMessage(
@@ -462,23 +460,8 @@ class TestCaseTreeProvider {
     //vscode.window.showInformationMessage(`Running Test Case ${index + 1}`);
     const activeEditor = vscode.window.activeTextEditor;
     if (activeEditor) {
-      //const filePath = activeEditor.document.fileName;
-
-      // Read the file content (if needed)
       const cppContent = activeEditor.document.getText();
-
-      // Pass everything to the tester function
-      let resp = await testerfun(
-        cppContent,
-        parsedInput,
-        parsedOutput,
-        variableNames,
-        funName,
-        parsedinput2,
-        parsedOutput2
-      );
-
-      // Update the result in the tree view
+      let resp = await testerfun(cppContent, parsedinput2);
 
       let resp2;
 
@@ -554,70 +537,70 @@ class TestCaseTreeProvider {
 
 //----------------------Parser----------------------------------
 
-function parseAndFormat(input, paramTypes) {
-  let variableNames = [];
+// function parseAndFormat(input, paramTypes) {
+//   let variableNames = [];
 
-  const regex = /(\w+)\s*=/g;
-  let match;
-  while ((match = regex.exec(input)) !== null) {
-    variableNames.push(match[1]);
-  }
+//   const regex = /(\w+)\s*=/g;
+//   let match;
+//   while ((match = regex.exec(input)) !== null) {
+//     variableNames.push(match[1]);
+//   }
 
-  // Control flags and counters
-  let result = "";
-  let idx = 0;
-  let canInsertAuto = true;
-  //let canChangeBraces = true;
-  let canChangeComma = true;
-  let arrayDepth = 0;
-  let insideString = false;
+//   // Control flags and counters
+//   let result = "";
+//   let idx = 0;
+//   let canInsertAuto = true;
+//   //let canChangeBraces = true;
+//   let canChangeComma = true;
+//   let arrayDepth = 0;
+//   let insideString = false;
 
-  for (let i = 0; i < input.length; i++) {
-    const char = input[i];
-    if (char === '"' || char === "'") {
-      insideString = !insideString;
-      //canChangeBraces = !insideString;
-      canChangeComma = !insideString;
-    }
+//   for (let i = 0; i < input.length; i++) {
+//     const char = input[i];
+//     if (char === '"' || char === "'") {
+//       insideString = !insideString;
+//       //canChangeBraces = !insideString;
+//       canChangeComma = !insideString;
+//     }
 
-    if (!insideString) {
-      if (char === "[") {
-        arrayDepth++;
-        if (arrayDepth === 1) {
-          canChangeComma = false;
-        }
-        result += "{";
-        continue;
-      } else if (char === "]") {
-        result += "}";
-        arrayDepth--;
-        if (arrayDepth === 0) {
-          canChangeComma = true;
-        }
-        continue;
-      }
+//     if (!insideString) {
+//       if (char === "[") {
+//         arrayDepth++;
+//         if (arrayDepth === 1) {
+//           canChangeComma = false;
+//         }
+//         result += "{";
+//         continue;
+//       } else if (char === "]") {
+//         result += "}";
+//         arrayDepth--;
+//         if (arrayDepth === 0) {
+//           canChangeComma = true;
+//         }
+//         continue;
+//       }
 
-      if (char === "," && canChangeComma && arrayDepth === 0) {
-        result += " ; ";
-        canInsertAuto = true;
-        continue;
-      }
+//       if (char === "," && canChangeComma && arrayDepth === 0) {
+//         result += " ; ";
+//         canInsertAuto = true;
+//         continue;
+//       }
 
-      if (canInsertAuto) {
-        result += paramTypes[idx] + " ";
-        idx += 1;
-        canInsertAuto = false;
-      }
-    }
-    result += char;
-  }
-  result += " ;";
+//       if (canInsertAuto) {
+//         result += paramTypes[idx] + " ";
+//         idx += 1;
+//         canInsertAuto = false;
+//       }
+//     }
+//     result += char;
+//   }
+//   result += " ;";
 
-  return {
-    variables: variableNames,
-    formattedCode: result,
-  };
-}
+//   return {
+//     variables: variableNames,
+//     formattedCode: result,
+//   };
+// }
 
 function parseAndFormat2(input) {
   // let variableNames = [];
@@ -681,31 +664,31 @@ function parseAndFormat2(input) {
   return result;
 }
 
-function parseOutput(outputString, returnType) {
-  let result = "";
-  let insideString = false;
+// function parseOutput(outputString, returnType) {
+//   let result = "";
+//   let insideString = false;
 
-  for (let i = 0; i < outputString.length; i++) {
-    const char = outputString[i];
-    if (char === '"' || char === "'") {
-      insideString = !insideString;
-    }
+//   for (let i = 0; i < outputString.length; i++) {
+//     const char = outputString[i];
+//     if (char === '"' || char === "'") {
+//       insideString = !insideString;
+//     }
 
-    if (!insideString) {
-      if (char === "[") {
-        result += "{";
-        continue;
-      } else if (char === "]") {
-        result += "}";
-        continue;
-      }
-    }
-    result += char;
-  }
+//     if (!insideString) {
+//       if (char === "[") {
+//         result += "{";
+//         continue;
+//       } else if (char === "]") {
+//         result += "}";
+//         continue;
+//       }
+//     }
+//     result += char;
+//   }
 
-  let outputContent = returnType + "  expected = " + result.trim() + ";";
-  return outputContent;
-}
+//   let outputContent = returnType + "  expected = " + result.trim() + ";";
+//   return outputContent;
+// }
 
 function parseOutput2(outputString) {
   let result = "";
@@ -851,12 +834,7 @@ function sanitizeText(text) {
 //   }
 // }
 
-async function createProblemFiles(
-  problemName,
-  templateCode,
-  testCases,
-  iodatatypes
-) {
+async function createProblemFiles(problemName, templateCode, testCases) {
   problemName = problemName.replace(".html", "");
   // also remove last (1) type of thing
   problemName = problemName.replace(/\s*\(.*\)/, "");
@@ -891,7 +869,6 @@ using namespace std;
   };
 
   testCaseData.testCases.push({
-    iodatatypes: iodatatypes,
     input: "a=-1",
     output: "b=-1",
   });
@@ -899,7 +876,6 @@ using namespace std;
   // Add the actual test cases
   testCases.forEach((testCase) => {
     testCaseData.testCases.push({
-      iodatatypes: iodatatypes,
       input: testCase.input,
       output: testCase.output,
     });
@@ -919,23 +895,12 @@ using namespace std;
 
 //---------------------------------------------Compile and run------------------------------------------------
 // Function to write the parsed content to bgrunner.cpp
-async function updateCppFile(
-  currentcode,
-  parsedInput,
-  parsedOutput,
-  inputVariables,
-  funName,
-  parsedinput2
-) {
+async function updateCppFile(currentcode, parsedinput2) {
   // Path to your C++ file
   const cppFilePath = "./bgrunner.cpp";
 
-  // Read the current content of the C++ file
-  //let cppContentwithoutcurrentcode = fs.readFileSync(cppFilePath, "utf8");
-  // let cppContent = `${currentcode}\n${cppContentwithoutcurrentcode}`;
   let cppContent = currentcode;
 
-  // Extract where the code will be inserted after the line `// add your code here`
   const insertIndex = cppContent.indexOf(dummyLine);
 
   if (insertIndex === -1) {
@@ -947,43 +912,17 @@ async function updateCppFile(
     return;
   }
 
-  // Prepare the code to insert
-  const inputString = parsedinput2; // Example of parsed input
-  //const outputString = parsedOutput; // Example of parsed output
-  // const funCall = `fun(${inputVariables.join(", ")});`;
-  // const nxtline = `if (expected == krish.${funName}(${inputVariables.join(
-  //   ", "
-  // )}))`;
-  //if (expectedoutput == fun(nums, val))
-
-  // Insert the parsed input and output and the function call
-  // cppContent =
-  //   cppContent.slice(0, insertIndex + dummyLine.length) +
-  //   "\n" +
-  //   inputString +
-  //   "\n" +
-  //   outputString +
-  //   "\n" +
-  //   "Solution krish;\n" +
-  //   nxtline +
-  //   cppContent.slice(insertIndex + dummyLine.length);
+  const inputString = parsedinput2;
   cppContent =
     cppContent.slice(0, insertIndex + dummyLine.length) +
     "\n" +
     inputString +
     "\n" +
-    // outputString +
-    // "\n" +
-    // "Solution krish;\n" +
-    // nxtline +
     cppContent.slice(insertIndex + dummyLine.length);
-
-  // Write the updated content back to the C++ file
   fs.writeFileSync(cppFilePath, cppContent);
 }
 
 async function compileAndRunCpp() {
-  // Compile the C++ file
   const compile = () => {
     return new Promise((resolve, reject) => {
       exec("g++ bgrunner.cpp -o kkk.exe", (err, stdout, stderr) => {
@@ -996,7 +935,6 @@ async function compileAndRunCpp() {
     });
   };
 
-  // Run the compiled executable
   const run = () => {
     return new Promise((resolve, reject) => {
       exec("kkk.exe", (err, stdout, stderr) => {
@@ -1019,32 +957,8 @@ async function compileAndRunCpp() {
   }
 }
 
-// Function to restore the original content from bgrunnerpermanent.cpp to bgrunner.cpp
-async function restoreOriginalCpp() {
-  // Read the content of bgrunnerpermanent.cpp
-  // const path =
-  const permanentCpp = fs.readFileSync("./bgrunnerpermanent.cpp", "utf8");
-
-  // Write the original content back to bgrunner.cpp
-  fs.writeFileSync("./bgrunner.cpp", permanentCpp);
-}
-
-async function testerfun(
-  currentcode,
-  parsedInput,
-  parsedOutput,
-  inputVariables,
-  funName,
-  parsedinput2
-) {
-  await updateCppFile(
-    currentcode,
-    parsedInput,
-    parsedOutput,
-    inputVariables,
-    funName,
-    parsedinput2
-  );
+async function testerfun(currentcode, parsedinput2) {
+  await updateCppFile(currentcode, parsedinput2);
 
   let resp = await compileAndRunCpp();
   return resp;
@@ -1052,36 +966,36 @@ async function testerfun(
 
 //------------------Function Signature Parser-------------------
 
-function parseFunctionSignature(functionSignature) {
-  // Regex to extract the return type and parameter types
-  const regex = /([a-zA-Z0-9<>&\[\]]+)\s+([a-zA-Z0-9_]+)\s*\((.*)\)/;
+// function parseFunctionSignature(functionSignature) {
+//   // Regex to extract the return type and parameter types
+//   const regex = /([a-zA-Z0-9<>&\[\]]+)\s+([a-zA-Z0-9_]+)\s*\((.*)\)/;
 
-  // Match the function signature using regex
-  const match = functionSignature.match(regex);
+//   // Match the function signature using regex
+//   const match = functionSignature.match(regex);
 
-  if (!match) {
-    console.error("Invalid function signature");
-    return;
-  }
+//   if (!match) {
+//     console.error("Invalid function signature");
+//     return;
+//   }
 
-  // Extract return type and parameters
-  const returnTypewithampercent = match[1]; // The return type is the first capture group
-  const funName = match[2]; // The function name is in the second capture group
-  const paramsStringwithampercent = match[3]; // The parameter types are in the third capture group
-  const returnType = returnTypewithampercent.replace("&", ""); // Remove the & symbol
-  const paramsString = paramsStringwithampercent.replace("&", ""); // Remove the & symbol
-  console.log("paramsString:", paramsString);
-  // Now, extract the parameter data types
-  const paramTypes = paramsString.split(",").map((param) => {
-    // Clean up spaces and extract only the data type part
-    const dataType = param.trim().split(" ")[0];
-    return dataType;
-  });
+//   // Extract return type and parameters
+//   const returnTypewithampercent = match[1]; // The return type is the first capture group
+//   const funName = match[2]; // The function name is in the second capture group
+//   const paramsStringwithampercent = match[3]; // The parameter types are in the third capture group
+//   const returnType = returnTypewithampercent.replace("&", ""); // Remove the & symbol
+//   const paramsString = paramsStringwithampercent.replace("&", ""); // Remove the & symbol
+//   console.log("paramsString:", paramsString);
+//   // Now, extract the parameter data types
+//   const paramTypes = paramsString.split(",").map((param) => {
+//     // Clean up spaces and extract only the data type part
+//     const dataType = param.trim().split(" ")[0];
+//     return dataType;
+//   });
 
-  // Return the result as an object
-  return {
-    returnType,
-    paramTypes,
-    funName,
-  };
-}
+//   // Return the result as an object
+//   return {
+//     returnType,
+//     paramTypes,
+//     funName,
+//   };
+// }
