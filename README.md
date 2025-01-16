@@ -1,65 +1,79 @@
-# html-parser README
+# Leetcode Testcases Extractor VSCode Extension
 
-This is the README for your extension "html-parser". After writing up a brief description, we recommend including the following sections.
+## Introduction
 
-## Features
+The Leetcode Testcases Extractor is a powerful Visual Studio Code extension designed to streamline the process of working with test cases for Leetcode problems. For added convenience, a Chrome extension has also been developed, allowing users to bypass the hassle of copying and pasting Leetcode problem links. 
 
-Describe specific features of your extension including screenshots of your extension in action. Image paths are relative to this README file.
-
-For example if there is an image subfolder under your extension project workspace:
-
-\!\[feature X\]\(images/feature-x.png\)
-
-> Tip: Many popular extensions utilize animations. This is an excellent way to show off your extension! We recommend short, focused animations that are easy to follow.
-
-## Requirements
-
-If you have any requirements or dependencies, add a section describing those and how to install and configure them.
-
-## Extension Settings
-
-Include if your extension adds any VS Code settings through the `contributes.configuration` extension point.
-
-For example:
-
-This extension contributes the following settings:
-
-* `myExtension.enable`: Enable/disable this extension.
-* `myExtension.thing`: Set to `blah` to do something.
-
-## Known Issues
-
-Calling out known issues can help limit users opening duplicate issues against your extension.
-
-## Release Notes
-
-Users appreciate release notes as you update your extension.
-
-### 1.0.0
-
-Initial release of ...
-
-### 1.0.1
-
-Fixed issue #.
-
-### 1.1.0
-
-Added features X, Y, and Z.
+With an intuitive GUI and robust features, this extension simplifies test case management, making it an essential tool for competitive programmers and Leetcode enthusiasts.
 
 ---
 
-## Working with Markdown
+## Features
 
-You can author your README using Visual Studio Code.  Here are some useful editor keyboard shortcuts:
+### Seamless Test Case Management
+- **Extract Test Cases from Leetcode Problems**: Quickly extract test cases directly from Leetcode problems.
+- **Dynamic Test Case Display**: Automatically updates the test cases to match the currently active `.cpp` file, ensuring you always see relevant test cases.
 
-* Split the editor (`Cmd+\` on macOS or `Ctrl+\` on Windows and Linux)
-* Toggle preview (`Shift+Cmd+V` on macOS or `Shift+Ctrl+V` on Windows and Linux)
-* Press `Ctrl+Space` (Windows, Linux, macOS) to see a list of Markdown snippets
+### Intuitive GUI
+- Open the test case extension from the sidebar, easily identifiable by its **smiley logo**.
+- User-friendly interface for managing test cases, including:
+  - **Run Single Test Case**
+  - **Run All Test Cases**
+  - **Edit Test Case**
+  - **Delete Test Case**
+  - **Add New Test Case**
 
-## For more information
+### Persistent Storage
+- Test cases are stored in a `.json` file, ensuring all modifications are saved.
+- Changes remain persistent even after closing and reopening Visual Studio Code.
 
-* [Visual Studio Code's Markdown Support](http://code.visualstudio.com/docs/languages/markdown)
-* [Markdown Syntax Reference](https://help.github.com/articles/markdown-basics/)
+### Chrome Extension Integration
+- Simplified workflow with a Chrome extension that eliminates the need to manually paste Leetcode problem links.
 
-**Enjoy!**
+---
+
+## Detailed Description of How It Works
+
+1. **Opening the Leetcode Problem Page**:
+   - The user opens a Leetcode problem page in their browser.
+
+2. **Triggering the Chrome Extension**:
+   - With the Chrome extension installed, the user clicks the "Let's Code" button.
+   - If the page is indeed a Leetcode problem, the HTML of the problem is downloaded to the user's system.
+
+3. **Triggering the VS Code Extension**:
+   - The VS Code extension is automatically triggered as soon as the problem's HTML is downloaded.
+
+4. **Selecting the Desired Language**:
+   - The extension prompts the user to select their preferred programming language.
+
+5. **Parsing the Problem Data**:
+   - The HTML file is parsed to extract the test cases and boilerplate code.
+   - A new file is created based on the problem's name, corresponding to the selected language.
+   - Boilerplate code is added to the file, and the test cases are stored in a `.json` file.
+
+6. **CRUD Operations on Test Cases**:
+   - All standard CRUD operations are supported, including:
+     - **Add New Test Case**
+     - **Edit Existing Test Case**
+     - **Delete Test Case**
+     - **View Test Case**
+   - The test cases are managed through a dedicated GUI accessible via the sidebar.
+
+7. **Responsive Test Case Updates**:
+   - As the user switches between different problems, the displayed test cases dynamically update to match the active problem.
+
+8. **Executing Test Cases**:
+   - Users can run single or multiple test cases, with results and outputs displayed in real-time.
+
+9. **File Naming**:
+   - The names of all files (code and test case files) correspond to the problem name to ensure consistency (file renaming is not currently supported).
+
+10. **GUI Highlights**:
+    - A sleek and responsive interface ensures ease of use.
+    - Test case results and outputs are clearly shown after running.
+
+---
+
+**Enjoy hassle-free test case management!**
+
