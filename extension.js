@@ -1,5 +1,3 @@
-//import { constrainedMemory } from "process";
-
 const vscode = require("vscode");
 const fs = require("fs");
 const path = require("path");
@@ -160,14 +158,14 @@ function activate(context) {
               const testCases = testcasesAndBoilerplate.testCases;
               const boilerplate = testcasesAndBoilerplate.boilerplate;
               // Show test cases in the output channel
-              const outputChannel =
-                vscode.window.createOutputChannel("Test Cases");
-              outputChannel.show();
-              testCases.forEach((testCase, index) => {
-                outputChannel.appendLine(`Test Case ${index + 1}:`);
-                outputChannel.appendLine(`  Input: ${testCase.input}`);
-                outputChannel.appendLine(`  Output: ${testCase.output}`);
-              });
+              // const outputChannel =
+              //   vscode.window.createOutputChannel("Test Cases");
+              // outputChannel.show();
+              // testCases.forEach((testCase, index) => {
+              //   outputChannel.appendLine(`Test Case ${index + 1}:`);
+              //   outputChannel.appendLine(`  Input: ${testCase.input}`);
+              //   outputChannel.appendLine(`  Output: ${testCase.output}`);
+              // });
               //ask for language
               let problemName = filename.replace(".html", "");
               // also remove last (1) type of thing
