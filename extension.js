@@ -143,17 +143,13 @@ function activate(context) {
     (eventType, filename) => {
       if (eventType === "rename" && filename.endsWith(".html")) {
         const filePath = path.join(downloadsFolder, filename);
-        // Clear previous debounce timer if it's still active
         clearTimeout(debounceTimer);
-        // Set new debounce timer
         debounceTimer = setTimeout(async () => {
           try {
             const stats = await fs.promises.stat(filePath);
 
             if (stats.isFile()) {
-              // Read the file asynchronously
               const htmlContent = await fs.promises.readFile(filePath, "utf-8");
-              // Extract test cases
               const testcasesAndBoilerplate = extractTestCases(htmlContent);
               const testCases = testcasesAndBoilerplate.testCases;
               const boilerplate = testcasesAndBoilerplate.boilerplate;
@@ -166,17 +162,15 @@ function activate(context) {
               //   outputChannel.appendLine(`  Input: ${testCase.input}`);
               //   outputChannel.appendLine(`  Output: ${testCase.output}`);
               // });
-              //ask for language
               let problemName = filename.replace(".html", "");
-              // also remove last (1) type of thing
               problemName = filename.replace(/\s*\(.*\)/, "");
 
               const selectedLanguage = await vscode.window.showQuickPick(
-                ["cpp", "py"], // Options
+                ["cpp", "py"],
                 {
-                  placeHolder: `Select the language for problem ${problemName}`, // Placeholder text
-                  canPickMany: false, // Ensure only one option can be selected
-                  ignoreFocusOut: true, // Keep the picker open when focus is lost
+                  placeHolder: `Select the language for problem ${problemName}`,
+                  canPickMany: false,
+                  ignoreFocusOut: true,
                 }
               );
 
@@ -198,7 +192,7 @@ function activate(context) {
           } catch (err) {
             console.error("Error accessing file:", err);
           }
-        }, 1000); // Debounce interval
+        }, 1000);
       }
     }
   );
@@ -224,7 +218,6 @@ class TreeItem extends vscode.TreeItem {
     this.children = children;
     this.contextValue = contextValue;
 
-    // Add a command for "Run Button"
     if (label === "Run Button") {
       this.command = {
         command: "testCasesView.itemClicked",
@@ -233,7 +226,6 @@ class TreeItem extends vscode.TreeItem {
       };
     }
 
-    // Add a command for editable fields (Input/Output)
     if (contextValue === "editable") {
       this.command = {
         command: "testCasesView.editText",
@@ -242,7 +234,6 @@ class TreeItem extends vscode.TreeItem {
       };
     }
 
-    // Add a command for "Run All"
     if (label === "Run All") {
       this.command = {
         command: "testCasesView.runAll",
@@ -250,7 +241,6 @@ class TreeItem extends vscode.TreeItem {
       };
     }
 
-    // Add a command for "New Test Case"
     if (contextValue === "addTestCase") {
       this.command = {
         command: "testCasesView.addTestCase",
@@ -258,7 +248,6 @@ class TreeItem extends vscode.TreeItem {
       };
     }
 
-    // Add a command for "Delete"
     if (contextValue === "deleteTestCase") {
       this.command = {
         command: "testCasesView.deleteTestCase",
@@ -293,7 +282,7 @@ class TestCaseTreeProvider {
       },
     };
     this.data = [];
-    this.currentCppFile = null; // To track the active .cpp file
+    this.currentCppFile = null;
   }
 
   refreshviajson() {
@@ -328,7 +317,7 @@ class TestCaseTreeProvider {
 
   getTestCases() {
     if (!this.currentCppFile) {
-      return []; // No active .cpp file
+      return [];
     }
 
     const workspaceFolder = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
@@ -337,7 +326,6 @@ class TestCaseTreeProvider {
       return [];
     }
 
-    // extension of current opened file
     let selectedLanguage = this.currentCppFile.split(".").pop();
 
     const testCasesFolder = path.join(workspaceFolder, "test_cases");
@@ -348,9 +336,7 @@ class TestCaseTreeProvider {
     const testCaseFilePath = path.join(testCasesFolder, `${problemName}json`);
 
     if (!fs.existsSync(testCaseFilePath)) {
-      //make folder and .json file
       fs.writeFileSync(testCaseFilePath, JSON.stringify({ testCases: [] }));
-      //return []; // No test case file for the active .cpp
     }
 
     try {
@@ -358,9 +344,7 @@ class TestCaseTreeProvider {
       const testCaseData = JSON.parse(fileContent);
       let tempdata = [];
       tempdata.push(new TreeItem("Add Test Case", null, "addTestCase"));
-      tempdata.push(
-        new TreeItem("Run All", null, null) // bss iska reverse karna baaki hai
-      );
+      tempdata.push(new TreeItem("Run All", null, null));
       let saveButton = this.createSaveButton();
       tempdata.push(saveButton);
       for (let i = 0; i < testCaseData.testCases.length; i++) {
@@ -369,12 +353,10 @@ class TestCaseTreeProvider {
             `TC ${i}`,
             testCaseData.testCases[i].input,
             testCaseData.testCases[i].output
-            //testCaseData.testCases[i].iodatatypes
           )
         );
       }
       return tempdata || [];
-      //return testCaseData.testCases || [];
     } catch (err) {
       vscode.window.showErrorMessage("Error reading test case file. " + err);
       return [];
@@ -403,7 +385,6 @@ class TestCaseTreeProvider {
     let testCaseDatajson = { testCases: [] };
     let testCaseData = [];
 
-    //now iterate over all test cases
     for (let i = 3; i < this.data.length; i++) {
       const testCase = this.data[i];
       const input = testCase.children[0].label.replace("Input: ", "").trim();
@@ -425,9 +406,7 @@ class TestCaseTreeProvider {
     vscode.window.showInformationMessage(`Test cases saved to ${testCaseFile}`);
   }
 
-  // Required method to resolve each tree item
   getTreeItem(element) {
-    // Add icons for result items
     if (element.label.startsWith("Result :")) {
       const result = element.label.split(":")[1]?.trim();
       if (result === "Test Passed") {
@@ -441,7 +420,6 @@ class TestCaseTreeProvider {
     return element;
   }
 
-  // Find parent of a specific child item
   findParent(child) {
     const findRecursive = (data, target) => {
       for (const item of data) {
@@ -458,15 +436,13 @@ class TestCaseTreeProvider {
     return findRecursive(this.data, child);
   }
 
-  // Required method to get tree data
   getChildren(element) {
     if (!element) {
-      return this.data; // Return root-level items
+      return this.data;
     }
-    return element.children || []; // Return children of the given item
+    return element.children || [];
   }
 
-  // Method to run a single test case
   async runTest(testCase) {
     const resultChild = testCase.children[3];
     const outputChild = testCase.children[5];
@@ -490,8 +466,6 @@ class TestCaseTreeProvider {
         await resp.replace("\r", " ");
         await resp.replace("\t", " ");
         await resp.replace("\v", " ");
-        //replace new lines endlines and tabs
-
         console.log("resp : " + resp);
         console.log("parsedOutput2 : " + parsedOutput2);
 
@@ -512,7 +486,6 @@ class TestCaseTreeProvider {
     }
   }
 
-  // Method to run all test cases
   async runAllTests() {
     for (const testCase of this.data) {
       if (testCase.children) {
@@ -522,9 +495,9 @@ class TestCaseTreeProvider {
   }
 
   addTestCase(label) {
-    const newTestCase = this.createTestCase(label, "Input", "Output"); // run all ka context isme paas karunga baad mei
+    const newTestCase = this.createTestCase(label, "Input", "Output");
     this.data.push(newTestCase);
-    this.refresh(); // Refresh after adding the new test case
+    this.refresh();
   }
 
   deleteTestCase(item) {
@@ -532,31 +505,26 @@ class TestCaseTreeProvider {
       for (let i = 0; i < data.length; i++) {
         const currentItem = data[i];
         if (currentItem === targetItem) {
-          data.splice(i, 1); // Remove the entire test case
-          return true; // Stop further traversal
+          data.splice(i, 1);
+          return true;
         }
         if (currentItem.children) {
           const removed = deleteRecursive(currentItem.children, targetItem);
-          if (removed) return true; // Stop traversal if the item was deleted
+          if (removed) return true;
         }
       }
-      return false; // Item not found
+      return false;
     };
 
-    // Find the parent of the clicked item
     const parent = this.findParent(item);
     if (parent) {
-      // If the "Delete" button is clicked, remove the parent test case
       deleteRecursive(this.data, parent);
     } else {
-      // If no parent is found, delete from root level (failsafe)
       deleteRecursive(this.data, item);
     }
-
-    this.refresh(); // Refresh the tree to reflect changes
+    this.refresh();
   }
 
-  // Event to notify VS Code when the tree should refresh
   _onDidChangeTreeData = new vscode.EventEmitter();
   onDidChangeTreeData = this._onDidChangeTreeData.event;
 }
@@ -586,7 +554,6 @@ function parseAndFormat2(input, selectedLanguage) {
         result += selectedLanguage === "py" ? "[" : "{";
         continue;
       } else if (char === "]") {
-        //result += "}";
         result += selectedLanguage === "py" ? "]" : "}";
         arrayDepth--;
         if (arrayDepth === 0) {
@@ -674,7 +641,7 @@ function extractTestCases(html) {
       let outputText = strongElement.nextSibling?.textContent?.trim();
       if (outputText) {
         testCases.push({ input: currentInput, output: outputText });
-        currentInput = null; // Reset for the next case
+        currentInput = null;
       } else {
         const outputSpan =
           strongElement.parentNode?.getElementsByTagName("span")[0];
@@ -685,7 +652,7 @@ function extractTestCases(html) {
           outputText = sanitizeText(outputText);
           testCases.push({ input: currentInput, output: outputText });
         }
-        currentInput = null; // Reset for the next case
+        currentInput = null;
       }
     }
   });
@@ -711,13 +678,9 @@ function extractTestCases(html) {
 
 // Function to sanitize the extracted text
 function sanitizeText(text) {
-  // Replace non-breaking spaces with regular spaces
   text = text.replace(/\u00A0/g, " ");
-  // Replace smart quotes with regular quotes
   text = text.replace(/[“”]/g, '"').replace(/[‘’]/g, "'");
-  // Optionally, remove any other non-printable characters
-  text = text.replace(/[\x00-\x1F\x7F]/g, ""); // Remove control characters
-  // Return the sanitized text
+  text = text.replace(/[\x00-\x1F\x7F]/g, "");
   return text;
 }
 
@@ -729,7 +692,6 @@ async function createProblemFiles(
 ) {
   let selectedLanguage = initialLanguage;
   problemName = problemName.replace(".html", "");
-  // also remove last (1) type of thing
   problemName = problemName.replace(/\s*\(.*\)/, "");
   const workspaceFolder = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
   if (!workspaceFolder) {
@@ -737,7 +699,6 @@ async function createProblemFiles(
     return;
   }
 
-  // File paths
   const cppFilePath = path.join(
     workspaceFolder,
     `${problemName}.${selectedLanguage}`
@@ -745,12 +706,9 @@ async function createProblemFiles(
   const testCaseFolder = path.join(workspaceFolder, "test_cases");
   const testCaseFilePath = path.join(testCaseFolder, `${problemName}.json`);
 
-  // Ensure test_cases folder exists
   if (!fs.existsSync(testCaseFolder)) {
     await fs.mkdirSync(testCaseFolder);
   }
-
-  // Create .cpp file
 
   let extratemp =
     selectedLanguage === "cpp"
@@ -762,7 +720,6 @@ async function createProblemFiles(
   `
       : "";
   const cppTemplate = extratemp + templateCode;
-  //if file already exists, then don't overwrite it
 
   if (fs.existsSync(cppFilePath)) {
     vscode.window.showErrorMessage(
@@ -777,7 +734,6 @@ async function createProblemFiles(
     testCases: [],
   };
 
-  // Add the actual test cases
   testCases.forEach((testCase) => {
     testCaseData.testCases.push({
       input: testCase.input,
@@ -785,13 +741,11 @@ async function createProblemFiles(
     });
   });
 
-  // Write the modified data to the file
   await fs.writeFileSync(
     testCaseFilePath,
     JSON.stringify(testCaseData, null, 2)
   );
 
-  // Open .cpp file in editor
   vscode.workspace.openTextDocument(cppFilePath).then((doc) => {
     vscode.window.showTextDocument(doc);
   });
@@ -876,9 +830,9 @@ async function compileAndRunCpp(selectedLanguage) {
   };
 
   try {
-    await compile(); // Wait for the compilation to complete
-    const result = await run(); // Wait for the program to execute
-    return result; // Return the program's output
+    await compile();
+    const result = await run();
+    return result;
   } catch (error) {
     return `error : ${error}`;
   }
